@@ -1,0 +1,54 @@
+# 🚀 {{.AppName}}
+
+{{.Description}}
+
+## 📋 Prerequisites
+
+Make sure your development environment is set up correctly:
+
+```bash
+flugo doctor
+```
+
+## ⚡ Quick Start
+
+Generate the bridge code and run the app:
+
+```bash
+flugo generate
+flugo run
+```
+
+## 📁 Project Structure
+
+```
+{{.Name}}/
+├── backend/          # Go backend
+│   ├── bridge/       # Auto-generated bridge code (do not edit)
+│   ├── main.go       # Entry point
+│   └── service.go    # Backend services
+├── frontend/         # Flutter frontend
+│   ├── lib/
+│   │   ├── app/      # App UI code
+│   │   └── bridge/   # Auto-generated bridge code (do not edit)
+│   └── pubspec.yaml
+├── assets/           # Icons, packaging files
+├── flugo.yaml        # Flugo project config
+└── Makefile          # Build helpers
+```
+
+## 🛠️ Common Commands
+
+| Command | Description |
+|---|---|
+| `flugo generate` | Generate bridge code from Go services |
+| `flugo run` | Run the app in development mode |
+| `flugo build linux` | Build for Linux |
+| `flugo build macos` | Build for macOS |
+| `flugo build windows` | Build for Windows |
+| `flugo clean` | Clean build artifacts |
+| `flugo doctor` | Check development environment |
+
+## 📖 Learn More
+
+See the [flugo repository](https://github.com/hkdb/flugo) for full documentation.

@@ -1,0 +1,27 @@
+name: hardware_key
+description: Flutter plugin for hardware-key HMAC-SHA1 challenge-response (YubiKey on Android via NFC/USB-OTG, iOS via NFC/Lightning). Ships with flugo.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.11.1
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.flugo.hardware_key
+        pluginClass: HardwareKeyPlugin
+      ios:
+        pluginClass: HardwareKeyPlugin

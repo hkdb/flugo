@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        NFC permission — required for the YubiKey OTP applet to respond
+        over NFC. USB-OTG works without an additional permission (the
+        UsbManager handles per-attach prompts).
+    -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+</manifest>

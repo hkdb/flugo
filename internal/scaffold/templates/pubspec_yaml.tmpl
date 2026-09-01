@@ -1,0 +1,36 @@
+name: {{.DartName}}
+description: {{.Description}}
+publish_to: 'none'
+
+version: {{.Version}}
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+{{- if .URLScheme}}
+  app_links: ^6.3.0
+{{- end}}
+  code_assets: ^1.0.0
+  ffi: ^2.1.4
+  hooks: ^1.0.0
+  cupertino_icons: ^1.0.8
+  window_manager: ^0.4.3
+  file_picker: ^8.0.0
+  url_launcher: ^6.2.0
+  path_provider: ^2.1.0
+  share_plus: ^10.0.0
+  # Pinned: 2.0.2+ ship a broken Android build.gradle.kts (references the
+  # kotlin{} extension without applying the Kotlin Gradle plugin → build fails).
+  # 2.0.1 is the newest with the AndroidFolderType.other API and a working build.
+  open_file_manager: 2.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

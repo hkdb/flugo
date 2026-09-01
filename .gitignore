@@ -1,0 +1,47 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.work
+go.work.sum
+
+# Env / local
+.env
+.env.local
+
+# flugo update backups
+*.bak
+
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flugo generated (in scaffolded projects)
+bridge.gen.go
+bridge.gen.h
+bridge.gen.dart
+
+# Built CLI binary at the repo root. Anchored with a leading slash so it only
+# matches ./flugo and NOT the cmd/flugo/ source directory (a bare `flugo` would
+# ignore that package too and break `go install .../cmd/flugo`).
+/flugo

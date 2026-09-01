@@ -1,0 +1,289 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+
+import '../bridge/bridge.gen.dart';
+import '../main.dart' show CustomTitlebarStyle, titlebarStyle;
+import 'titlebar.dart';
+
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop =
+        Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+
+    return MaterialApp(
+      title: '{{.AppName}}',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorSchemeSeed: const Color(0xFF2E7D32),
+        brightness: Brightness.dark,
+        useMaterial3: true,
+      ),
+      builder: (context, child) {
+        if (!isDesktop) return child!;
+        return Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (context) => Column(
+                children: [
+                  ValueListenableBuilder<CustomTitlebarStyle>(
+                    valueListenable: titlebarStyle,
+                    builder: (context, style, _) {
+                      if (style == CustomTitlebarStyle.native) {
+                        return const SizedBox.shrink();
+                      }
+                      return const CustomTitleBar(title: '{{.AppName}}');
+                    },
+                  ),
+                  Expanded(child: child!),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+      home: const HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  String _greeting = '';
+  String _sum = '';
+  final _nameController = TextEditingController();
+  final _aController = TextEditingController();
+  final _bController = TextEditingController();
+
+  Future<void> _callGreet() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    try {
+      final result = await greeterService.greet(name);
+      setState(() => _greeting = result);
+    } on FlugoException catch (e) {
+      setState(() => _greeting = 'Error: $e');
+    }
+  }
+
+  Future<void> _callAdd() async {
+    final a = int.tryParse(_aController.text);
+    final b = int.tryParse(_bController.text);
+    if (a == null || b == null) return;
+    try {
+      final result = await greeterService.add(a, b);
+      setState(() => _sum = '$a + $b = $result');
+    } on FlugoException catch (e) {
+      setState(() => _sum = 'Error: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _aController.dispose();
+    _bController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Logo and title.
+                      Text(
+                        '{{.AppName}}',
+                        style: theme.textTheme.displaySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Powered by Flugo \u2022 Go + Flutter',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 48),
+
+                      // Greet card.
+                      Card(
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Greet',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Calls GreeterService.Greet() in Go',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _nameController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Your name',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.person_outline),
+                                ),
+                                onSubmitted: (_) => _callGreet(),
+                              ),
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: _callGreet,
+                                icon: const Icon(Icons.waving_hand),
+                                label: const Text('Say Hello'),
+                              ),
+                              if (_greeting.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    _greeting,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color:
+                                          theme.colorScheme.onPrimaryContainer,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Add card.
+                      Card(
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Add',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Calls GreeterService.Add() in Go',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _aController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'A',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12),
+                                    child: Text('+',
+                                        style: theme.textTheme.headlineSmall),
+                                  ),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _bController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'B',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      onSubmitted: (_) => _callAdd(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: _callAdd,
+                                icon: const Icon(Icons.calculate_outlined),
+                                label: const Text('Calculate'),
+                              ),
+                              if (_sum.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    _sum,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color:
+                                          theme.colorScheme.onPrimaryContainer,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}

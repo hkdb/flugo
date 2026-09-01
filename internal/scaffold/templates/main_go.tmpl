@@ -1,0 +1,16 @@
+package main
+
+import (
+	"github.com/hkdb/flugo/pkg/bridge"
+)
+
+func init() {
+	bridge.Bind(&GreeterService{})
+{{- if .URLScheme}}
+	// Windows deep-link registration (no-op elsewhere; other platforms
+	// register statically via `flugo deeplink`).
+	_ = bridge.RegisterURLScheme("{{.URLScheme}}")
+{{- end}}
+}
+
+func main() {}

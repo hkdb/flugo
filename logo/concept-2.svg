@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-labelledby="c2-title c2-desc">
+  <title id="c2-title">Flugo Logo — Stacked Scaffold</title>
+  <desc id="c2-desc">Three ascending blocks like a scaffold, from Go cyan to Flutter blue</desc>
+  <defs>
+    <linearGradient id="c2-mid" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ADD8"/>
+      <stop offset="100%" stop-color="#027DFD"/>
+    </linearGradient>
+  </defs>
+  <!-- Bottom block — Go cyan -->
+  <rect x="24" y="126" width="62" height="50" rx="7" fill="#00ADD8"/>
+  <!-- Middle block — blended gradient -->
+  <rect x="69" y="76" width="62" height="50" rx="7" fill="url(#c2-mid)"/>
+  <!-- Top block — Flutter blue -->
+  <rect x="114" y="26" width="62" height="50" rx="7" fill="#027DFD"/>
+</svg>

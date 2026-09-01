@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-labelledby="c3-title c3-desc">
+  <title id="c3-title">Flugo Logo — Hexagonal Assembly</title>
+  <desc id="c3-desc">Two hexagons sharing an edge, one Flutter blue and one Go cyan, representing modular fusion</desc>
+  <defs>
+    <linearGradient id="c3-fusion" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#027DFD"/>
+      <stop offset="100%" stop-color="#00ADD8"/>
+    </linearGradient>
+  </defs>
+  <!-- Upper hexagon — Flutter blue -->
+  <polygon points="100,18 148,45 148,99 100,126 52,99 52,45" fill="#027DFD"/>
+  <!-- Lower hexagon — Go cyan -->
+  <polygon points="100,74 148,101 148,155 100,182 52,155 52,101" fill="#00ADD8"/>
+  <!-- Overlap diamond — fusion zone where hexes share space -->
+  <polygon points="100,74 148,101 100,126 52,101" fill="url(#c3-fusion)" opacity="0.75"/>
+</svg>

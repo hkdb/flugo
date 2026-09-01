@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-labelledby="c1-title c1-desc">
+  <title id="c1-title">Flugo Logo — Interlocking Blocks</title>
+  <desc id="c1-desc">Two geometric blocks interlocking at an angle, representing Flutter and Go uniting</desc>
+  <defs>
+    <linearGradient id="c1-blend" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#027DFD"/>
+      <stop offset="100%" stop-color="#00ADD8"/>
+    </linearGradient>
+  </defs>
+  <!-- Flutter blue block (upper-left, rotated ~15°) -->
+  <rect x="28" y="30" width="80" height="70" rx="8" fill="#027DFD" transform="rotate(-12 68 65)"/>
+  <!-- Go cyan block (lower-right, rotated ~15° opposite) -->
+  <rect x="92" y="100" width="80" height="70" rx="8" fill="#00ADD8" transform="rotate(-12 132 135)"/>
+  <!-- Overlap / interlock zone — gradient blend -->
+  <rect x="82" y="82" width="36" height="36" rx="6" fill="url(#c1-blend)" opacity="0.9" transform="rotate(-12 100 100)"/>
+</svg>

@@ -1,0 +1,16 @@
+package main
+
+import "fmt"
+
+// GreeterService is an example service exposed to Flutter via Flugo.
+type GreeterService struct{}
+
+// Greet returns a greeting message.
+func (s *GreeterService) Greet(name string) (string, error) {
+	return fmt.Sprintf("Hello, %s!", name), nil
+}
+
+// Add returns the sum of two integers.
+func (s *GreeterService) Add(a, b int) (int, error) {
+	return a + b, nil
+}

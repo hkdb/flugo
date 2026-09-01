@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name={{.AppName}}
+Comment={{.Description}}
+Exec={{.DartName}}{{if .URLScheme}} %u{{end}}
+Icon={{.AppID}}
+Terminal=false
+Categories=Utility;
+{{- if .URLScheme}}
+MimeType=x-scheme-handler/{{.URLScheme}};
+{{- end}}

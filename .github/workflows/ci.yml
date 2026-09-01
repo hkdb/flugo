@@ -1,0 +1,32 @@
+name: CI
+
+# Gate merges into main: build, vet, and test on every PR. Also runnable by hand
+# (workflow_dispatch) — e.g. a manual sanity run before cutting a release tag.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Uses the version from the `go` directive in go.mod (currently 1.26.6).
+          go-version-file: go.mod
+          cache: true
+
+      # The host cgo (pkg/bridge, dartpost) only needs the default gcc on
+      # ubuntu-latest — no extra apt packages. Cross-platform (android/ios/
+      # windows/macos) builds are intentionally not gated here.
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...

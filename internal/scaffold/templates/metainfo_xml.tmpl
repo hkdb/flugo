@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>{{.AppID}}</id>
+  <name>{{.AppName}}</name>
+  <summary>{{.Description}}</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  {{- if .License}}
+  <project_license>{{.License}}</project_license>
+  {{- end}}
+  <description>
+    <p>{{.Description}}</p>
+  </description>
+  <launchable type="desktop-id">{{.AppID}}.desktop</launchable>
+  {{- if .URL}}
+  <url type="homepage">{{.URL}}</url>
+  {{- end}}
+  <provides>
+    <binary>{{.Name}}</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="{{.Version}}" date="{{.Date}}" />
+  </releases>
+</component>
