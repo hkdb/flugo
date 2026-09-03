@@ -220,6 +220,13 @@ func Create(opts Options) error {
 		fmt.Printf("  ⚠️  Could not patch platform permissions: %v\n", err)
 	}
 
+	// Stamp the real app.id onto the Android/iOS/macOS bundle identifiers
+	// (flutter create defaults them to com.example.<name>). Must run BEFORE the
+	// MainActivity patch, which re-renders the file at its (now relocated) package.
+	if err := applyBundleID(frontendDir, data.AppID); err != nil {
+		fmt.Printf("  ⚠️  Could not apply bundle id: %v\n", err)
+	}
+
 	// Patch Android MainActivity to include System.loadLibrary("backend")
 	// so JNI_OnLoad is called and the JVM pointer is available for Go code.
 	if err := patchAndroidManifestPermissions(frontendDir); err != nil {

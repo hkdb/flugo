@@ -191,6 +191,13 @@ func Update(projectDir string, cfg *config.Config, all bool, dryRun bool, cliVer
 		if err := patchAndroidManifestPermissions(filepath.Join(projectDir, "frontend")); err != nil {
 			return nil, err
 		}
+		// Stamp app.id onto the native bundle identifiers (fixes projects
+		// scaffolded before this — their IDs are still com.example.<name>).
+		// Runs before renderMainActivity below so the relocated Kotlin package
+		// is what gets re-rendered.
+		if err := applyBundleID(filepath.Join(projectDir, "frontend"), cfg.App.ID); err != nil {
+			return nil, fmt.Errorf("applying bundle id: %w", err)
+		}
 	}
 
 	files := frameworkFiles()
