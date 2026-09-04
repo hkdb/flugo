@@ -20,6 +20,9 @@ public class WebauthnPlugin: NSObject, FlutterPlugin {
     // Retains the in-flight ceremony (delegate + presentation provider) until it
     // completes; ASAuthorizationController does not keep its delegate alive.
     private var activeCeremony: AnyObject?
+    // Retains the in-flight controller so a Flutter "Cancel" can dismiss the
+    // native ASAuthorization sheet (controller.cancel(), iOS 16+).
+    private var activeController: AnyObject?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "flugo/webauthn", binaryMessenger: registrar.messenger())
@@ -34,6 +37,13 @@ public class WebauthnPlugin: NSObject, FlutterPlugin {
             runCeremony(call, result: result, register: false)
         case "makeCredential":
             runCeremony(call, result: result, register: true)
+        case "cancelAssertion":
+            // Dismiss the native sheet; the delegate's didCompleteWithError maps
+            // the resulting .canceled to a "cancelled" FlutterError. Best-effort.
+            if #available(iOS 16.0, *) {
+                (activeController as? ASAuthorizationController)?.cancel()
+            }
+            result(nil)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -64,6 +74,7 @@ public class WebauthnPlugin: NSObject, FlutterPlugin {
 
         let ceremony = Ceremony(register: register) { [weak self] outcome in
             self?.activeCeremony = nil
+            self?.activeController = nil
             switch outcome {
             case .success(let json): result(json)
             case .failure(let err): result(err)
@@ -73,6 +84,7 @@ public class WebauthnPlugin: NSObject, FlutterPlugin {
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = ceremony
         controller.presentationContextProvider = ceremony
+        activeController = controller
         controller.performRequests()
     }
 

@@ -85,29 +85,6 @@ class WebauthnPlugin {
     return _invokeCeremony('makeCredential', {'options': optionsJson, 'origin': origin, 'pin': pin});
   }
 
-  /// probeKey (Phase-1 SPIKE, Android): discover a security key over USB/NFC and
-  /// read its CTAP2 `getInfo()` with NO Google Play Services — validates the
-  /// generic transport before the full ceremony is built. Returns a
-  /// human-readable info string; throws [WebauthnException] on failure.
-  static Future<String> probeKey() async {
-    try {
-      final resp = await _channel.invokeMethod<String>('probeKey');
-      return resp ?? '(no info)';
-    } on PlatformException catch (e) {
-      throw WebauthnException(e.code, e.message ?? '');
-    }
-  }
-
-  /// cancelProbe stops an in-flight [probeKey] (e.g. the user dismissed the
-  /// "present your key" prompt). Best-effort.
-  static Future<void> cancelProbe() async {
-    try {
-      await _channel.invokeMethod('cancelProbe');
-    } on PlatformException {
-      // best-effort
-    }
-  }
-
   static Future<String> _invokeCeremony(String method, Map<String, dynamic> args) async {
     try {
       final resp = await _channel.invokeMethod<String>(method, args);

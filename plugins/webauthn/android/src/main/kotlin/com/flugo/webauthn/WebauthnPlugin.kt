@@ -58,7 +58,13 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
     private var pendingResult: MethodChannel.Result? = null
     private var pendingAction: ((Ctap2Session) -> String)? = null
     private var discoveryActive = false
+    private var timeoutRunnable: Runnable? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Overall ceremony watchdog: if no key is ever presented and the user never
+    // taps Cancel, finish the run with a timeout so pendingResult can't wedge the
+    // channel into a permanent "busy" state.
+    private val ceremonyTimeoutMs = 120_000L
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
@@ -104,12 +110,7 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
                 }
                 startCeremony(result) { session -> runRegistration(session, opts, origin, pin) }
             }
-            "probeKey" -> startCeremony(result) { session ->
-                val info = session.cachedInfo ?: session.info
-                val aaguid = info.aaguid?.joinToString("") { "%02x".format(it) } ?: "?"
-                "versions=${info.versions} aaguid=$aaguid"
-            }
-            "cancelProbe", "cancelAssertion" -> { finish(null, "cancelled"); result.success(null) }
+            "cancelAssertion" -> { finish(null, "cancelled"); result.success(null) }
             else -> result.notImplemented()
         }
     }
@@ -137,6 +138,9 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
                 // USB-only device; NFC not required.
             }
             discoveryActive = true
+            val watchdog = Runnable { finish(null, "timeout") }
+            synchronized(lock) { timeoutRunnable = watchdog }
+            mainHandler.postDelayed(watchdog, ceremonyTimeoutMs)
         } catch (e: Throwable) {
             Log.e("flugo/webauthn", "discovery start failed", e)
             finish(null, "discovery_start: ${e.message ?: e.javaClass.simpleName}")
@@ -149,6 +153,10 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
         // USB keys speak FIDO over HID (FidoConnection); NFC over ISO-DEP (SmartCardConnection).
         val connType = if (usb) FidoConnection::class.java else SmartCardConnection::class.java
         device.requestConnection(connType) { connResult ->
+            // Cancelled (or timed out) between discovery and this callback — don't
+            // run the ceremony or send the PIN to the key; the result is already
+            // delivered.
+            if (synchronized(lock) { pendingAction } == null) return@requestConnection
             try {
                 val session = when (val conn = connResult.value) {
                     is FidoConnection -> Ctap2Session(conn)
@@ -169,6 +177,8 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
             r = pendingResult
             pendingResult = null
             pendingAction = null
+            timeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+            timeoutRunnable = null
         }
         stopDiscovery()
         if (r == null) return
@@ -188,6 +198,20 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
     }
 
     // --- ceremonies (yubikit Ctap2Client) --------------------------------------
+    //
+    // Response-encoding contract (verify on any yubikit upgrade): the returned
+    // JSON is produced by yubikit's `cred.toMap(SerializationType.JSON)`, NOT by
+    // us, so its shape + encoding are a yubikit behavior we depend on. The server
+    // (go-webauthn) requires:
+    //   {id, rawId, type:"public-key",
+    //    response:{clientDataJSON, authenticatorData, signature, userHandle?}}   (assertion)
+    //   {id, rawId, type:"public-key", response:{clientDataJSON, attestationObject}} (registration)
+    // with EVERY binary field base64url, NO padding (no '=', '+' or '/'), and
+    // response.clientDataJSON equal to the bytes we passed via ClientDataProvider.
+    // This can't be unit-tested from source (yubikit owns the encoding) and fails
+    // CLOSED at the server if wrong (a bad response is rejected, never accepted).
+    // It is validated end-to-end on-device; if you bump the yubikit version,
+    // re-verify by decoding one real assertion response and checking the above.
 
     private fun runAssertion(session: Ctap2Session, optionsJson: String, origin: String, pin: String): String {
         val pub = publicKey(optionsJson)
@@ -196,10 +220,15 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
             clientDataJson("webauthn.get", pub.getString("challenge"), origin).toByteArray(Charsets.UTF_8),
         )
         val options = PublicKeyCredentialRequestOptions.fromMap(toMap(pub), SerializationType.JSON)
-        val cred: PublicKeyCredential = Ctap2Client(session).getAssertion(
-            clientData, options, rpId, pinChars(pin), null,
-        )
-        return JSONObject(cred.toMap(SerializationType.JSON)).toString()
+        val pc = pinChars(pin)
+        try {
+            val cred: PublicKeyCredential = Ctap2Client(session).getAssertion(
+                clientData, options, rpId, pc, null,
+            )
+            return JSONObject(cred.toMap(SerializationType.JSON)).toString()
+        } finally {
+            pc?.fill(' ') // zero the PIN buffer promptly (don't wait for GC)
+        }
     }
 
     private fun runRegistration(session: Ctap2Session, optionsJson: String, origin: String, pin: String): String {
@@ -209,10 +238,15 @@ class WebauthnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityA
             clientDataJson("webauthn.create", pub.getString("challenge"), origin).toByteArray(Charsets.UTF_8),
         )
         val options = PublicKeyCredentialCreationOptions.fromMap(toMap(pub), SerializationType.JSON)
-        val cred: PublicKeyCredential = Ctap2Client(session).makeCredential(
-            clientData, options, rpId, pinChars(pin), null, null,
-        )
-        return JSONObject(cred.toMap(SerializationType.JSON)).toString()
+        val pc = pinChars(pin)
+        try {
+            val cred: PublicKeyCredential = Ctap2Client(session).makeCredential(
+                clientData, options, rpId, pc, null, null,
+            )
+            return JSONObject(cred.toMap(SerializationType.JSON)).toString()
+        } finally {
+            pc?.fill(' ') // zero the PIN buffer promptly (don't wait for GC)
+        }
     }
 
     // pinChars → null for a key with no PIN configured (empty prompt), else the
