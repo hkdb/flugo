@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        External security keys reach the device over NFC or USB-C. The system
+        Credential Manager UI handles the transport + user verification, so no
+        runtime permission is required here; NFC is declared optional so the
+        app still installs on NFC-less hardware (USB-C keys still work).
+    -->
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+</manifest>
