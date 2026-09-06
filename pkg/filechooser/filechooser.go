@@ -30,7 +30,9 @@ func WriteFileStream(targetPath string, force bool, fn func(w io.Writer) error) 
 	if exists {
 		return WriteResult{Path: targetPath, Env: env, Exists: true}, nil
 	}
-	f, err := os.Create(dest)
+	// 0600, not os.Create's 0644 — outputs can be decrypted plaintext, which
+	// must not be world-readable on shared desktop systems.
+	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return WriteResult{}, fmt.Errorf("creating output: %w", err)
 	}

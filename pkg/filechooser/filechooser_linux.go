@@ -130,7 +130,7 @@ func WriteFile(targetPath string, data []byte, force bool) (WriteResult, error) 
 		if err != nil {
 			return WriteResult{}, fmt.Errorf("creating temp dir: %w", err)
 		}
-		if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
 			return WriteResult{}, fmt.Errorf("writing temp file: %w", err)
 		}
 		return WriteResult{Path: tmpPath, Env: "flatpak"}, nil
@@ -141,7 +141,7 @@ func WriteFile(targetPath string, data []byte, force bool) (WriteResult, error) 
 			return WriteResult{Path: targetPath, Env: "native", Exists: true}, nil
 		}
 	}
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
 		return WriteResult{}, fmt.Errorf("writing file: %w", err)
 	}
 	return WriteResult{Path: targetPath, Env: "native"}, nil
