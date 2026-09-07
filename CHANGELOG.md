@@ -1,5 +1,13 @@
 # CHANGELOG
 
+**v0.1.5 - 09-07-2026**
+---
+
+- Fixed Linux-arm64 
+- Fixed macOS build config
+- Fixed Windows builds
+
+
 **v0.1.4 - 09-07-2026**
 ---
 
