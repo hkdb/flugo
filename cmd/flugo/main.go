@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 
 	"github.com/hkdb/flugo/internal/util"
@@ -21,7 +22,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "0.1.0"
+// baseVersion is the fallback used for LOCAL builds (`go build`/`go install
+// ./cmd/flugo` from a checkout), where Go reports the module version as
+// "(devel)". Released binaries installed via `go install
+// github.com/hkdb/flugo/cmd/flugo@vX.Y.Z` report their real tag automatically
+// (see resolveVersion), so this literal only affects dev builds and no longer
+// needs bumping on every release.
+const baseVersion = "0.1.3"
+
+// version is the flugo CLI version, derived from the module version Go embeds at
+// install time so a tagged `go install ...@vX.Y.Z` reports the correct release
+// without hand-editing a literal (the bug that stuck every release at 0.1.0).
+var version = resolveVersion()
+
+// resolveVersion reads the embedded main-module version (set by `go install
+// path@version`) and falls back to baseVersion for untagged local builds.
+func resolveVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return strings.TrimPrefix(v, "v")
+		}
+	}
+	return baseVersion
+}
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
