@@ -151,6 +151,14 @@ Future<void> _applyHomebrewCgoEnv(Map<String, String> env) async {
     }
   }
   env['PKG_CONFIG_PATH'] = pcDirs.join(':');
+
+  // Homebrew's prefix is NOT a default compiler search path on macOS (unlike
+  // Linux's /usr), and some formulae's pkg-config Cflags point one level too
+  // deep — e.g. ykpers-1.pc yields `-I<prefix>/include/ykpers-1`, but the code
+  // does `#include <ykpers-1/ykcore.h>`, which needs the parent `include/` on
+  // the search path. Add the umbrella include/lib so those headers/libs resolve.
+  env['CGO_CFLAGS'] = '-I$prefix/include';
+  env['CGO_LDFLAGS'] = '-L$prefix/lib';
 }
 
 /// Makes MSYS2/mingw's pkg-config metadata visible to the backend's cgo build
