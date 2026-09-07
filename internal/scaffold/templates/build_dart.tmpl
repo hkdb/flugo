@@ -141,8 +141,11 @@ Future<void> _applyHomebrewCgoEnv(Map<String, String> env) async {
   // (it only reads the .pc files a directive names), so this glob is safe.
   final optDir = Directory('$prefix/opt');
   if (optDir.existsSync()) {
+    // opt/<formula> entries are SYMLINKS into Cellar, so list without following
+    // links and test each candidate pkgconfig dir directly — Directory.existsSync
+    // follows the symlink. Gating on `entry is Directory` would skip every keg
+    // (a symlink lists as a Link, not a Directory) and defeat the whole point.
     for (final entry in optDir.listSync(followLinks: false)) {
-      if (entry is! Directory) continue;
       final pc = Directory('${entry.path}/lib/pkgconfig');
       if (pc.existsSync()) pcDirs.add(pc.path);
     }
