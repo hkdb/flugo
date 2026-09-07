@@ -35,7 +35,10 @@ func frameworkFiles() []frameworkFile {
 		{"build_dart.tmpl", "frontend/hook/build.dart"},
 		{"ffigen_yaml.tmpl", "frontend/ffigen.yaml"},
 		{"makefile.tmpl", "Makefile"},
-		{"gitignore.tmpl", ".gitignore"},
+		// NB: .gitignore is intentionally NOT here. It's a hybrid file — flugo
+		// owns only a marked block of generated-file ignores; developer lines are
+		// preserved. It's merged separately in Update() (see mergeGitignore), not
+		// blindly overwritten.
 	}
 }
 
@@ -52,6 +55,51 @@ func userFiles(appID string) []frameworkFile {
 		{"metainfo_xml.tmpl", fmt.Sprintf("assets/linux/%s.metainfo.xml", appID)},
 		{"flatpak_manifest.tmpl", fmt.Sprintf("assets/linux/%s.yaml", appID)},
 	}
+}
+
+// The flugo-managed block markers inside .gitignore. flugo owns only the lines
+// between them (the generated-file ignores); everything else is developer-owned
+// and preserved across `flugo update`.
+const (
+	gitignoreBlockStart = "# ==== flugo-managed (auto-updated by `flugo update`; do not edit inside) ===="
+	gitignoreBlockEnd   = "# ==== end flugo-managed ===="
+)
+
+// extractManagedBlock returns the flugo-managed block (start marker through end
+// marker, inclusive; no trailing newline) from rendered gitignore.tmpl content.
+func extractManagedBlock(rendered []byte) (string, error) {
+	s := string(rendered)
+	i := strings.Index(s, gitignoreBlockStart)
+	j := strings.Index(s, gitignoreBlockEnd)
+	if i < 0 || j < i {
+		return "", fmt.Errorf("gitignore.tmpl is missing the flugo-managed markers")
+	}
+	return s[i : j+len(gitignoreBlockEnd)], nil
+}
+
+// mergeGitignore returns the existing .gitignore content with the flugo-managed
+// block refreshed to `block`: replaced in place when the markers are present,
+// otherwise appended after one blank line. Every non-block line is preserved
+// verbatim, so developer customizations survive.
+func mergeGitignore(existing []byte, block string) []byte {
+	s := string(existing)
+	if i := strings.Index(s, gitignoreBlockStart); i >= 0 {
+		if j := strings.Index(s[i:], gitignoreBlockEnd); j >= 0 {
+			end := i + j + len(gitignoreBlockEnd)
+			return []byte(s[:i] + block + s[end:])
+		}
+	}
+	switch {
+	case s == "":
+		s = block + "\n"
+	case strings.HasSuffix(s, "\n\n"):
+		s += block + "\n"
+	case strings.HasSuffix(s, "\n"):
+		s += "\n" + block + "\n"
+	default:
+		s += "\n\n" + block + "\n"
+	}
+	return []byte(s)
 }
 
 // extractFlugoReplace reads backend/go.mod and returns the local path from
@@ -240,6 +288,36 @@ func Update(projectDir string, cfg *config.Config, all bool, dryRun bool, cliVer
 		}
 	} else if !errors.Is(merrr, errNoAndroidMainActivity) {
 		return nil, merrr
+	}
+
+	// .gitignore is a hybrid file: flugo owns only a marked block of generated-
+	// file ignores; developer lines outside it must survive. Render the template
+	// for the authoritative current block, then splice it into the existing file
+	// (replace the marked region, or append when absent) rather than overwriting.
+	{
+		var buf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&buf, "gitignore.tmpl", data); err != nil {
+			return nil, fmt.Errorf("executing template gitignore.tmpl: %w", err)
+		}
+		block, err := extractManagedBlock(buf.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		giPath := filepath.Join(projectDir, ".gitignore")
+		existing, rerr := os.ReadFile(giPath)
+		switch {
+		case rerr == nil:
+			if err := applyRendered(result, ".gitignore", giPath, mergeGitignore(existing, block), dryRun); err != nil {
+				return nil, err
+			}
+		case os.IsNotExist(rerr):
+			// No .gitignore at all (unusual on update) — write the full template.
+			if err := applyRendered(result, ".gitignore", giPath, buf.Bytes(), dryRun); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("reading .gitignore: %w", rerr)
+		}
 	}
 
 	// Stamp flugo_version after a successful non-dry-run update.

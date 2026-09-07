@@ -1,5 +1,11 @@
 # CHANGELOG
 
+**v0.1.4 - 09-07-2026**
+---
+
+- Fixed .gitignore update
+
+
 **v0.1.3 - 09-07-2026**
 ---
 

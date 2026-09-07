@@ -28,7 +28,7 @@ import (
 // github.com/hkdb/flugo/cmd/flugo@vX.Y.Z` report their real tag automatically
 // (see resolveVersion), so this literal only affects dev builds and no longer
 // needs bumping on every release.
-const baseVersion = "0.1.3"
+const baseVersion = "0.1.4"
 
 // version is the flugo CLI version, derived from the module version Go embeds at
 // install time so a tagged `go install ...@vX.Y.Z` reports the correct release
