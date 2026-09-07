@@ -159,6 +159,12 @@ func configDependentFiles() []frameworkFile {
 	return []frameworkFile{
 		{"main_dart.tmpl", "frontend/lib/main.dart"},
 		{"titlebar_dart.tmpl", "frontend/lib/app/titlebar.dart"},
+		// The native-assets build hook is framework-owned and must track the CLI
+		// version (its cgo/pkg-config logic changes between flugo releases), so
+		// re-render it on every build/run like the files above — otherwise a
+		// `flugo build` after a CLI bump silently keeps running the stale hook
+		// until someone remembers to `flugo update`.
+		{"build_dart.tmpl", "frontend/hook/build.dart"},
 	}
 }
 

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+**v0.1.6 - 09-07-2026**
+---
+
+- Fixed macOS patched hook
+- Fixed Windows installer path
+
+
 **v0.1.5 - 09-07-2026**
 ---
 
