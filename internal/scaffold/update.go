@@ -252,6 +252,11 @@ func Update(projectDir string, cfg *config.Config, all bool, dryRun bool, cliVer
 		if err := applyBundleID(filepath.Join(projectDir, "frontend"), cfg.App.ID); err != nil {
 			return nil, fmt.Errorf("applying bundle id: %w", err)
 		}
+		// Stamp app.name onto the macOS AppInfo.xcconfig PRODUCT_NAME so the built
+		// .app is named after the app, not the flutter project (ic_app).
+		if err := patchMacOSAppInfo(filepath.Join(projectDir, "frontend"), cfg.App.Name, cfg.App.ID); err != nil {
+			return nil, fmt.Errorf("applying macos app info: %w", err)
+		}
 	}
 
 	files := frameworkFiles()

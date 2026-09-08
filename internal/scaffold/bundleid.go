@@ -20,7 +20,38 @@ var (
 	androidNamespaceRe     = regexp.MustCompile(`namespace\s*=\s*"[^"]*"`)
 	kotlinPackageRe        = regexp.MustCompile(`(?m)^package .*$`)
 	xcodeBundleIDRe        = regexp.MustCompile(`PRODUCT_BUNDLE_IDENTIFIER = [^;]+;`)
+	// AppInfo.xcconfig lines are `KEY = value` (no quotes, no trailing `;`).
+	xcconfigProductNameRe = regexp.MustCompile(`(?m)^PRODUCT_NAME = .*$`)
+	xcconfigBundleIDRe    = regexp.MustCompile(`(?m)^PRODUCT_BUNDLE_IDENTIFIER = .*$`)
 )
+
+// patchMacOSAppInfo stamps the branded app name + bundle id into the Flutter
+// macOS AppInfo.xcconfig. Info.plist resolves CFBundleName (and the .app bundle
+// + executable names) from $(PRODUCT_NAME), so without this the built app is
+// named after the flutter project (ic_app), not app.name. Idempotent; a no-op
+// when macOS isn't generated.
+func patchMacOSAppInfo(frontendDir, appName, appID string) error {
+	path := filepath.Join(frontendDir, "macos", "Runner", "Configs", "AppInfo.xcconfig")
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	content := string(raw)
+	if appName != "" {
+		content = xcconfigProductNameRe.ReplaceAllStringFunc(content, func(string) string {
+			return "PRODUCT_NAME = " + appName
+		})
+	}
+	if appID != "" {
+		content = xcconfigBundleIDRe.ReplaceAllStringFunc(content, func(string) string {
+			return "PRODUCT_BUNDLE_IDENTIFIER = " + appID
+		})
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
+}
 
 // applyBundleID stamps appID onto the Android/iOS/macOS native projects (Android
 // sanitized to a valid package). Idempotent; each platform is a no-op when not
