@@ -223,8 +223,15 @@ func typeExprName(expr ast.Expr) string {
 // analyzeTypes uses go/packages to load type information for the bound types.
 func (g *Generator) analyzeTypes(names []string) ([]BoundType, error) {
 	cfg := &packages.Config{
-		Mode: packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax | packages.NeedName,
-		Dir:  g.backendDir,
+		// NeedImports + NeedDeps load full type info for the whole dependency
+		// graph from source, rather than relying on the on-demand export-data
+		// importer. Without them, a cold build cache (or a cgo package like
+		// icfx's hardware/chalresp whose export data isn't available) makes
+		// go/types throw `internal error: package "..." without types` — even
+		// for stdlib imports like context. Loading deps is slower but correct.
+		Mode: packages.NeedName | packages.NeedSyntax | packages.NeedTypes |
+			packages.NeedTypesInfo | packages.NeedImports | packages.NeedDeps,
+		Dir: g.backendDir,
 	}
 
 	pkgs, err := packages.Load(cfg, ".")

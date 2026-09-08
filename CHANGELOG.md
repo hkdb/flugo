@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+**v0.1.8 - 09-08-2026**
+---
+
+- Fixed macos builds
+- Fixed macos and windows icons
+
+
 **v0.1.7 - 09-08-2026**
 ---
 
