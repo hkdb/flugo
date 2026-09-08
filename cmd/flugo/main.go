@@ -588,6 +588,42 @@ func generateIcons(projectDir string, cfg *config.Config) error {
 		fmt.Println("  Generated iOS icons")
 	}
 
+	// macOS app icons (only if the appiconset dir exists, like iOS). Filenames
+	// match the committed Contents.json the Flutter macOS scaffold ships.
+	macIconDir := filepath.Join(projectDir, "frontend", "macos", "Runner", "Assets.xcassets", "AppIcon.appiconset")
+	if _, err := os.Stat(macIconDir); err == nil {
+		macIcons := []struct {
+			filename string
+			size     int
+		}{
+			{"app_icon_16.png", 16},
+			{"app_icon_32.png", 32},
+			{"app_icon_64.png", 64},
+			{"app_icon_128.png", 128},
+			{"app_icon_256.png", 256},
+			{"app_icon_512.png", 512},
+			{"app_icon_1024.png", 1024},
+		}
+		for _, i := range macIcons {
+			out := filepath.Join(macIconDir, i.filename)
+			if err := renderIcon(source, out, i.size); err != nil {
+				return fmt.Errorf("macos %s: %w", i.filename, err)
+			}
+		}
+		fmt.Println("  Generated macOS icons")
+	}
+
+	// Windows app icon: a single multi-resolution .ico (only if the runner
+	// resources dir exists). Runner.rc already references app_icon.ico.
+	winResDir := filepath.Join(projectDir, "frontend", "windows", "runner", "resources")
+	if _, err := os.Stat(winResDir); err == nil {
+		out := filepath.Join(winResDir, "app_icon.ico")
+		if err := renderICO(source, out); err != nil {
+			return fmt.Errorf("windows app_icon.ico: %w", err)
+		}
+		fmt.Println("  Generated Windows icon")
+	}
+
 	return nil
 }
 
@@ -609,6 +645,26 @@ func findIconRenderer() (func(source, output string, size int) error, error) {
 	}
 
 	return nil, fmt.Errorf("neither rsvg-convert nor ImageMagick found; install one to generate icons")
+}
+
+// renderICO writes a multi-resolution Windows .ico from the source image.
+// rsvg-convert cannot emit .ico, so this specifically needs ImageMagick
+// (`magick` on v7, or the legacy `convert`); `icon:auto-resize` packs every
+// listed size into a single .ico.
+func renderICO(source, output string) error {
+	magick, err := exec.LookPath("magick")
+	if err != nil {
+		magick, err = exec.LookPath("convert")
+		if err != nil {
+			return fmt.Errorf("ImageMagick (magick/convert) is required to generate the Windows .ico; install it (rsvg-convert cannot write .ico)")
+		}
+	}
+	cmd := exec.Command(magick, "-background", "none", source,
+		"-define", "icon:auto-resize=256,128,64,48,32,16", output)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s", err, string(out))
+	}
+	return nil
 }
 
 // --- doctor ---
