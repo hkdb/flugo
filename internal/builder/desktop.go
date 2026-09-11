@@ -80,9 +80,34 @@ func (b *Builder) bundleGoLib(platform string) error {
 	var dst string
 	switch platform {
 	case "macos":
-		// Find the .app bundle in the build output
-		appName := strings.ReplaceAll(filepath.Base(b.projectDir), "-", "_")
-		dst = filepath.Join(b.frontendDir(), "build", "macos", "Build", "Products", "Release", appName+".app", "Contents", "Frameworks", outputName)
+		// Locate the actual .app Flutter built rather than recomputing its
+		// name: Flutter names the bundle after PRODUCT_NAME (AppInfo.xcconfig),
+		// which may differ from the project dir (e.g. a branded PRODUCT_NAME).
+		// Recomputing the name would MkdirAll a wrong path and fabricate a
+		// hollow bundle containing only the Go lib; globbing the real bundle
+		// keeps the lib landing in the populated app.
+		releaseDir := filepath.Join(b.frontendDir(), "build", "macos", "Build", "Products", "Release")
+		apps, err := filepath.Glob(filepath.Join(releaseDir, "*.app"))
+		if err != nil {
+			return err
+		}
+		appPath := ""
+		for _, a := range apps {
+			// A real Flutter bundle has Contents/MacOS; skip any hollow
+			// leftover (e.g. from a prior buggy build).
+			fi, statErr := os.Stat(filepath.Join(a, "Contents", "MacOS"))
+			if statErr != nil || !fi.IsDir() {
+				continue
+			}
+			if appPath != "" {
+				return fmt.Errorf("multiple .app bundles in %s; run `flutter clean` and rebuild", releaseDir)
+			}
+			appPath = a
+		}
+		if appPath == "" {
+			return fmt.Errorf("no built .app found in %s; did `flutter build macos` succeed?", releaseDir)
+		}
+		dst = filepath.Join(appPath, "Contents", "Frameworks", outputName)
 	default:
 		// Linux/Windows: library goes next to the executable in the bundle
 		paths := b.flutterBuildOutputPaths(platform)
