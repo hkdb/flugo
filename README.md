@@ -217,6 +217,7 @@ For the threat model, the wire-level flow, codegen behavior, and pitfalls, see [
 | `flugo create <name>` | Scaffold a new project (`-m`/`--module`, `--flugo-path`) |
 | `flugo generate` | Regenerate bridge code from bound Go structs (`--regen-platforms`) |
 | `flugo build <platform>` | Build for linux/macos/windows/android/ios/appimage/flatpak/all (`--release`) |
+| `flugo package <platform>` | Package a built app for distribution (Linux → installable tarball; see [Linux Packaging](#linux-packaging)) |
 | `flugo run [platform]` | Build and run (default: current desktop; or `android`/`ios`) |
 | `flugo update` | Refresh flugo-managed files from the current templates — framework files incl. the Android `MainActivity` (`--all`, `--dry-run`) |
 | `flugo upgrade [ref]` | Self-update the CLI binary (`--flugo-path` for local builds) |
@@ -483,6 +484,42 @@ myapp/
 
 ## Linux Packaging
 
+### Tarball (installable)
+
+Package the built Linux app into a self-contained tarball:
+
+```bash
+flugo build linux --release
+flugo package linux
+```
+
+Output: `build/package/linux/<AppName>-<version>-linux-<arch>.tar.gz` (arch is `x86_64` or `aarch64`, matching the
+build host). The tarball extracts to a `<slug>/` directory containing the app plus a guided installer:
+
+```
+<slug>/
+├── install.sh          # per-user (~/.local) or system-wide (/opt + /usr/local)
+├── uninstall.sh
+├── app.env             # app metadata the scripts read
+├── <AppID>.desktop     # menu entry (uses assets/linux/<AppID>.desktop if present)
+├── icons/              # from assets/icons/
+└── app/                # the Flutter bundle + Go backend
+```
+
+The end user just runs it:
+
+```bash
+tar xzf <AppName>-<version>-linux-x86_64.tar.gz
+cd <slug>
+./install.sh            # menu entry + icon + an on-PATH launcher (per-user or system-wide)
+./uninstall.sh          # removes everything it installed
+```
+
+`install.sh` wires up the `.desktop` `Exec` to the installed launcher and registers the icon under the hicolor
+theme; if `app.url_scheme` is set, the desktop entry's `x-scheme-handler/<scheme>` MimeType makes the install the
+handler for `<scheme>://` deep links. If the launcher's `bin` dir isn't on `PATH`, it adds it (per-user: your shell
+profile; system-wide: `/etc/profile.d/`) and tells the user to log out and back in so the terminal command works.
+
 ### AppImage
 
 Scaffold the required AppImage assets:
@@ -501,7 +538,7 @@ This will:
 - Auto-build the Linux release if not already built
 - Auto-install `appimagetool` if not found (downloads a pinned, SHA-256-verified release from GitHub to `~/.local/bin/`)
 - Assemble an AppDir with your app, Go backend, and bundled shared library dependencies
-- Output: `build/package/linux/<AppName>-<version>-x86_64.AppImage`
+- Output: `build/package/linux/<AppName>-<version>-<arch>.AppImage` (`x86_64` or `aarch64`, per the build host)
 
 ### Flatpak
 
@@ -521,6 +558,35 @@ Generate Flathub submission assets:
 flugo flathub
 ```
 
+## Plugins
+
+Flugo bundles optional Flutter plugins under `plugins/` for platform capabilities that need native mobile code.
+Depend on the ones you need via a git path dependency in your app's `frontend/pubspec.yaml` (they register
+automatically — no manual channel wiring):
+
+| Plugin | What it does | Platforms |
+|--------|--------------|-----------|
+| `hardware_key` | HMAC-SHA1 challenge-response with a YubiKey over NFC / USB | Android, iOS ⚠️ |
+| `webauthn` | External security-key WebAuthn/FIDO2 login & enroll (assertion / attestation) | Android, iOS ⚠️ |
+
+> **⚠️ iOS is untested** for both plugins — the native iOS side is implemented but **not yet verified** on-device;
+> Android is the exercised path.
+
+```yaml
+dependencies:
+  hardware_key:
+    git:
+      url: https://github.com/hkdb/flugo.git
+      ref: v0.1.11              # pin to the flugo version you build against
+      path: plugins/hardware_key
+```
+
+- **hardware_key** — transport-only HMAC-SHA1 challenge-response over NFC/USB-OTG (Android) or NFC/Lightning
+  (iOS); you decide what to do with the 20-byte response. See [docs/HARDWARE_KEY.md](docs/HARDWARE_KEY.md).
+- **webauthn** — runs the native external-security-key ceremony from the server's options JSON and returns the
+  response JSON a WebAuthn relying party parses; the Android backend is Google-Play-Services-free (works on
+  de-Googled builds). See [docs/WEBAUTHN.md](docs/WEBAUTHN.md).
+
 ## Documentation
 
 Flugo includes built-in bridge functions that handle common cross-platform concerns automatically. Developers don't need to write platform-specific code for file dialogs, app directory resolution, or other OS-level differences -- the framework handles it.
@@ -530,6 +596,8 @@ Flugo includes built-in bridge functions that handle common cross-platform conce
 - [Platform Display Name](docs/MANIFEST.md) -- setting the app name on each platform's home screen / app list
 - [Secure Intake (`bridge.Secret`)](docs/SECRETS.md) -- passphrase / key-material intake without JSON or string materialization
 - [Real-time Streams (`bridge.Emitter`)](docs/STREAMING.md) -- Go→Dart push of a typed sequence, generated as a Dart `Stream<T>` (progress, live events)
+- [Hardware-Key Challenge-Response](docs/HARDWARE_KEY.md) -- YubiKey HMAC-SHA1 over NFC/USB on mobile (`hardware_key` plugin)
+- [WebAuthn Security Keys](docs/WEBAUTHN.md) -- external FIDO2 security-key login / enroll on mobile (`webauthn` plugin)
 
 ## License
 

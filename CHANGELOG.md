@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+**v0.1.12 - 09-12-2026**
+---
+
+- Linux binary tarball release packaging redone
+- Updated documentation
+
+
 **v0.1.11 - 09-12-2026**
 ---
 
