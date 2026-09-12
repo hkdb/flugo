@@ -577,7 +577,7 @@ dependencies:
   hardware_key:
     git:
       url: https://github.com/hkdb/flugo.git
-      ref: v0.1.11              # pin to the flugo version you build against
+      ref: v0.1.13              # pin to the flugo version you build against
       path: plugins/hardware_key
 ```
 

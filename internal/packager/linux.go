@@ -71,7 +71,13 @@ func (p *Packager) packageLinux() error {
 	if err := os.WriteFile(filepath.Join(top, "uninstall.sh"), linuxUninstallScript, 0o755); err != nil {
 		return err
 	}
-	appEnv := fmt.Sprintf("APP_NAME=%q\nAPP_ID=%q\nBIN_NAME=%q\nSLUG=%q\n", appName, appID, binName, slug)
+	// Single-quote each value so the installer can safely `source` app.env — Go's
+	// %q is NOT shell-safe (it leaves $ and backtick unescaped), which would let a
+	// flugo.yaml app.name containing shell metacharacters execute at install time.
+	appEnv := "APP_NAME=" + shQuote(appName) + "\n" +
+		"APP_ID=" + shQuote(appID) + "\n" +
+		"BIN_NAME=" + shQuote(binName) + "\n" +
+		"SLUG=" + shQuote(slug) + "\n"
 	if err := os.WriteFile(filepath.Join(top, "app.env"), []byte(appEnv), 0o644); err != nil {
 		return err
 	}
@@ -181,6 +187,14 @@ func slugify(name string) string {
 		return "app"
 	}
 	return b.String()
+}
+
+// shQuote wraps s in POSIX single quotes so it's safe to `source` from a shell:
+// inside single quotes every character is literal, and an embedded ' is emitted
+// as the standard '\'' sequence. Unlike Go's %q, this neutralizes $, backtick,
+// and every other shell metacharacter.
+func shQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // copyFileMode copies src to dst with the given mode.
