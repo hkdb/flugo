@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+**v0.1.11 - 09-12-2026**
+---
+
+- Added arm64 AppImage builds
+
+
 **v0.1.10 - 09-12-2026**
 ---
 

@@ -38,8 +38,15 @@ func (b *Builder) buildAppImage() error {
 		name = parts[len(parts)-1]
 	}
 
+	// Flutter emits the desktop bundle under an arch-specific dir (x64 / arm64),
+	// and appimagetool needs the matching ARCH; derive both from the host arch.
+	flutterArch, appImageArch := "x64", "x86_64"
+	if runtime.GOARCH == "arm64" {
+		flutterArch, appImageArch = "arm64", "aarch64"
+	}
+
 	// Auto-build linux release if not already built.
-	bundleDir := filepath.Join(b.frontendDir(), "build", "linux", "x64", "release", "bundle")
+	bundleDir := filepath.Join(b.frontendDir(), "build", "linux", flutterArch, "release", "bundle")
 	if _, err := stat(bundleDir); err != nil {
 		fmt.Println("  ⚙️  Release build not found, building linux first...")
 		if err := b.buildDesktop("linux", true); err != nil {
@@ -115,12 +122,16 @@ func (b *Builder) buildAppImage() error {
 		return err
 	}
 
-	outputName := fmt.Sprintf("%s-%s-x86_64.AppImage", b.cfg.App.Name, b.cfg.App.Version)
+	outputName := fmt.Sprintf("%s-%s-%s.AppImage", b.cfg.App.Name, b.cfg.App.Version, appImageArch)
 	outputPath := filepath.Join(packageDir, outputName)
 
 	fmt.Println("  ⚙️  Running appimagetool...")
 	args := []string{appDir, outputPath}
-	if err := runCommand("appimagetool", args, b.projectDir, nil); err != nil {
+	// Set ARCH explicitly so appimagetool embeds the matching runtime (it can't
+	// reliably infer it from the AppDir); without this, aarch64 builds fail or get
+	// stamped as x86_64.
+	env := []string{"ARCH=" + appImageArch}
+	if err := runCommand("appimagetool", args, b.projectDir, env); err != nil {
 		return fmt.Errorf("appimagetool failed: %w", err)
 	}
 
