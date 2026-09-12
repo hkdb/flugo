@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+**v0.1.13 - 09-12-2026**
+---
+
+- Make app.env generation shell safe
+
+
 **v0.1.12 - 09-12-2026**
 ---
 
