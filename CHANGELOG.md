@@ -5,6 +5,7 @@
 ---
 
 - macOS build fix
+- AppImage fix
 
 
 **v0.1.13 - 09-12-2026**
