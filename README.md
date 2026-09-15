@@ -219,7 +219,7 @@ For the threat model, the wire-level flow, codegen behavior, and pitfalls, see [
 | `flugo build <platform>` | Build for linux/macos/windows/android/ios/appimage/flatpak/all (`--release`) |
 | `flugo package <platform>` | Package a built app for distribution (Linux → installable tarball; see [Linux Packaging](#linux-packaging)) |
 | `flugo run [platform]` | Build and run (default: current desktop; or `android`/`ios`) |
-| `flugo update` | Refresh flugo-managed files from the current templates — framework files incl. the Android `MainActivity` (`--all`, `--dry-run`) |
+| `flugo update` | Refresh flugo-managed files from the current templates and sync flugo version pins (`flugo.yaml`, `backend/go.mod`; `--plugins` also bumps pubspec plugin refs). Flags: `--all`, `--plugins`, `--no-sync`, `--dry-run` |
 | `flugo upgrade [ref]` | Self-update the CLI binary (`--flugo-path` for local builds) |
 | `flugo appimage` | Scaffold AppImage packaging assets |
 | `flugo flathub` | Generate Flathub submission assets |
@@ -296,10 +296,54 @@ Flugo templates are embedded in the CLI binary, so upgrading involves two steps:
 
 2. **Update your project's framework files:**
    ```bash
-   flugo update               # Apply the new binary's templates
+   flugo update               # Apply the new binary's templates + sync version pins
+   flugo update --plugins     # Also bump flugo plugin git refs in pubspec.yaml
+   flugo update --no-sync     # Apply edits but skip `go mod tidy` / `flutter pub get`
+   flugo update --dry-run     # Preview without writing
    ```
 
+   `flugo update` syncs your project's flugo version references to the CLI's
+   version (see [Versioning](#versioning)) so they never drift:
+   - `flugo.yaml` `flugo_version` — always stamped (the clean base version).
+   - `backend/go.mod` — the `github.com/hkdb/flugo` require is bumped and
+     `go mod tidy` is run. **Skipped** if you have a local
+     `replace github.com/hkdb/flugo => …` (a local override is developer-managed —
+     flugo leaves it intact and does not insert/remove it).
+   - `frontend/pubspec.yaml` — flugo plugin git `ref:`s are bumped **only with
+     `--plugins`** (plugins are versioned independently of the framework, so this
+     alignment is opt-in), followed by `flutter pub get`.
+
+   This works the same whether you installed a released `flugo` or a local build,
+   because the version comes from flugo's embedded VERSION file, not git-tag
+   detection. `--no-sync` skips only the `go`/`flutter` network reconcile (when
+   tooling/network is unavailable); the file edits still happen.
+
 When you run `flugo run` or `flugo build`, Flugo will print a hint if the project's `flugo_version` differs from the CLI version, reminding you to run `flugo update`.
+
+> **Keeping CI in sync:** don't hardcode a flugo version in your CI workflow.
+> Derive it from the (auto-stamped) `flugo.yaml` instead, e.g. in a step before
+> installing the CLI:
+> ```bash
+> echo "FLUGO_VERSION=v$(sed -n 's/^flugo_version:[[:space:]]*//p' flugo.yaml)" >> "$GITHUB_ENV"
+> ```
+> Then `flugo update` propagates the version to CI with no manual edit.
+
+## Versioning
+
+Flugo's version comes from a committed **`internal/version/VERSION`** file, embedded into the binary at build
+time (`go:embed`). This makes `flugo version` reliable for **any** build method — a released
+`go install …/flugo/cmd/flugo@vX.Y.Z`, a local `go build`, and `./install.sh` all read the same base — rather
+than relying on git-tag detection (which only works for tagged installs).
+
+- **Released install** → `flugo version` prints the bare base, e.g. `0.2.1`.
+- **Local build** (from a checkout) → prints `0.2.1-<shortcommit>` (plus `-dirty` if the tree was modified),
+  so you can always tell a local build from a release. This commit suffix is **identity only** — it is never
+  written into a project's `flugo.yaml`/`go.mod`/pubspec (those must stay resolvable, so they always get the
+  clean base).
+
+**Cutting a release:** bump `internal/version/VERSION` **and** push the matching `git tag vX.Y.Z` together.
+The tag is only needed so consumers' `go.mod require github.com/hkdb/flugo vX.Y.Z` resolves; flugo itself no
+longer depends on the tag to know its version.
 
 ## Linting
 
@@ -580,6 +624,10 @@ dependencies:
       ref: v0.1.13              # pin to the flugo version you build against
       path: plugins/hardware_key
 ```
+
+Plugins are versioned independently of the framework, so their `ref:` is not bumped by a plain `flugo update`.
+Run `flugo update --plugins` to align these git refs to the flugo version you're updating to (it rewrites the
+`ref:` of any `git:` dependency pointing at the flugo repo, then runs `flutter pub get`).
 
 - **hardware_key** — transport-only HMAC-SHA1 challenge-response over NFC/USB-OTG (Android) or NFC/Lightning
   (iOS); you decide what to do with the 20-byte response. See [docs/HARDWARE_KEY.md](docs/HARDWARE_KEY.md).

@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strings"
 
 	"github.com/hkdb/flugo/internal/util"
@@ -19,32 +18,16 @@ import (
 	"github.com/hkdb/flugo/internal/flathub"
 	"github.com/hkdb/flugo/internal/packager"
 	"github.com/hkdb/flugo/internal/scaffold"
+	ver "github.com/hkdb/flugo/internal/version"
 	"github.com/spf13/cobra"
 )
 
-// baseVersion is the fallback used for LOCAL builds (`go build`/`go install
-// ./cmd/flugo` from a checkout), where Go reports the module version as
-// "(devel)". Released binaries installed via `go install
-// github.com/hkdb/flugo/cmd/flugo@vX.Y.Z` report their real tag automatically
-// (see resolveVersion), so this literal only affects dev builds and no longer
-// needs bumping on every release.
-const baseVersion = "0.1.4"
-
-// version is the flugo CLI version, derived from the module version Go embeds at
-// install time so a tagged `go install ...@vX.Y.Z` reports the correct release
-// without hand-editing a literal (the bug that stuck every release at 0.1.0).
-var version = resolveVersion()
-
-// resolveVersion reads the embedded main-module version (set by `go install
-// path@version`) and falls back to baseVersion for untagged local builds.
-func resolveVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		if v := info.Main.Version; v != "" && v != "(devel)" {
-			return strings.TrimPrefix(v, "v")
-		}
-	}
-	return baseVersion
-}
+// version is the flugo CLI's bare base version (e.g. "0.2.1"), read from the
+// embedded VERSION file — reliable for any build method. Used for stamping into
+// consumers and drift comparisons. User-facing prints use version.Display()
+// (which annotates local builds with a commit); dependency pins use
+// version.Tag() ("v"+base).
+var version = ver.Base()
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -64,7 +47,7 @@ var rootCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if v, _ := cmd.Flags().GetBool("version"); v {
-			fmt.Printf("flugo %s\n", version)
+			fmt.Printf("flugo %s\n", ver.Display())
 			return
 		}
 		_ = cmd.Help()
@@ -189,6 +172,8 @@ var updateCmd = &cobra.Command{
 
 		all, _ := cmd.Flags().GetBool("all")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		plugins, _ := cmd.Flags().GetBool("plugins")
+		noSync, _ := cmd.Flags().GetBool("no-sync")
 
 		if all && !dryRun {
 			fmt.Println("\n⚠️  --all will overwrite user-owned files (app.dart, pubspec.yaml, main.go, etc.)")
@@ -215,7 +200,7 @@ var updateCmd = &cobra.Command{
 			fmt.Printf("  ℹ️  Updating flugo_version: %s → %s\n\n", cfg.FlugoVersion, version)
 		}
 
-		result, err := scaffold.Update(projectDir, cfg, all, dryRun, version)
+		result, err := scaffold.Update(projectDir, cfg, all, dryRun, version, ver.Tag(), plugins, noSync)
 		if err != nil {
 			return err
 		}
@@ -262,6 +247,8 @@ func init() {
 	updateCmd.Flags().Bool("all", false, "Also update user-owned files (app.dart, pubspec.yaml, go files, etc.)")
 	updateCmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
 	updateCmd.Flags().BoolP("force", "y", false, "Skip confirmation prompt for --all")
+	updateCmd.Flags().Bool("plugins", false, "Also bump flugo-repo plugin git refs in frontend/pubspec.yaml to this flugo version")
+	updateCmd.Flags().Bool("no-sync", false, "Apply version edits but skip the go mod tidy / flutter pub get reconcile")
 }
 
 // --- generate ---
@@ -925,7 +912,7 @@ var upgradeCmd = &cobra.Command{
 
 		flugoPath, _ := cmd.Flags().GetString("flugo-path")
 
-		fmt.Printf("\n  Current version: %s\n", version)
+		fmt.Printf("\n  Current version: %s\n", ver.Display())
 
 		if flugoPath != "" {
 			return upgradeFromLocal(flugoPath, ref)
@@ -1067,7 +1054,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print Flugo version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("flugo %s\n", version)
+		fmt.Printf("flugo %s\n", ver.Display())
 	},
 }
 

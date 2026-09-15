@@ -54,7 +54,8 @@ type templateData struct {
 	MinWindowWidth  int
 	MinWindowHeight int
 	TitlebarStyle   string
-	FlugoVersion    string
+	FlugoVersion    string // bare version, e.g. "0.2.1" (flugo.yaml flugo_version)
+	FlugoVersionTag string // git/go.mod tag form, e.g. "v0.2.1" (backend/go.mod require)
 	URLScheme       string
 	GoArches        []gotoolchain.Arch
 }
@@ -116,6 +117,7 @@ func Create(opts Options) error {
 		MinWindowHeight: 480,
 		TitlebarStyle:   "default",
 		FlugoVersion:    opts.CLIVersion,
+		FlugoVersionTag: "v" + strings.TrimPrefix(opts.CLIVersion, "v"),
 		GoArches:        gotoolchain.Arches,
 	}
 
