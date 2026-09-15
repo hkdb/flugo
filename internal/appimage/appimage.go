@@ -114,5 +114,26 @@ func copyFile(src, dst string) error {
 const appRunTmpl = `#!/bin/bash
 HERE="$(dirname "$(readlink -f "$0")")"
 export LD_LIBRARY_PATH="$HERE/usr/lib:$LD_LIBRARY_PATH"
+
+# The bundled C++ runtime lives in usr/optional/cxx and is added to the loader
+# path only when it is strictly newer than the host's libstdc++. Otherwise we
+# defer to the host so host-provided libraries (notably the GPU driver's
+# Mesa/libEGL) keep working on newer distros. libstdc++ is forward-compatible
+# (a binary built against an older runtime runs on a newer one), so preferring
+# the host when it is newer is safe; the bundled copy is only needed on hosts
+# older than the build base.
+CXX="$HERE/usr/optional/cxx"
+if [ -e "$CXX/libstdc++.so.6" ]; then
+    ver() { LC_ALL=C grep -ao 'GLIBCXX_[0-9.]*' "$1" 2>/dev/null | sort -V | tail -n1; }
+    bundled="$(ver "$CXX/libstdc++.so.6")"
+    host_path="$(PATH="/sbin:/usr/sbin:$PATH" ldconfig -p 2>/dev/null | grep -m1 'libstdc++\.so\.6' | sed 's/.* => //')"
+    host=""
+    [ -n "$host_path" ] && [ -e "$host_path" ] && host="$(ver "$host_path")"
+    if [ -n "$bundled" ] && [ -n "$host" ] && [ "$bundled" != "$host" ] && \
+       [ "$(printf '%s\n%s\n' "$bundled" "$host" | sort -V | tail -n1)" = "$bundled" ]; then
+        export LD_LIBRARY_PATH="$CXX:$LD_LIBRARY_PATH"
+    fi
+fi
+
 exec "$HERE/usr/bin/{{.BinName}}" "$@"
 `

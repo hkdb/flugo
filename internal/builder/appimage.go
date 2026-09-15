@@ -116,6 +116,15 @@ func (b *Builder) buildAppImage() error {
 	fmt.Println("  ⚙️  Bundling shared library dependencies...")
 	bundleDeps(binaries, usrLib)
 
+	// Move the bundled C++ runtime into a side dir so AppRun can decide at launch
+	// whether to use it (older host) or defer to the host's (newer host). Leaving
+	// it in usr/lib would force the old bundled libstdc++ on host-provided libs
+	// (e.g. the GPU driver's Mesa/libEGL), breaking GL on newer distros.
+	cxxDir := filepath.Join(appDir, "usr", "optional", "cxx")
+	if err := relocateCxxRuntime(usrLib, cxxDir); err != nil {
+		return fmt.Errorf("relocating C++ runtime: %w", err)
+	}
+
 	// Run appimagetool.
 	packageDir := filepath.Join(b.buildDir(), "package", "linux")
 	if err := os.MkdirAll(packageDir, 0o755); err != nil {
@@ -201,12 +210,28 @@ var systemLibs = []string{
 	"libEGL.so",
 	"libGLX.so",
 	"libGLdispatch.so",
+	"libOpenGL.so",
 	"libvulkan.so",
 	"libdrm.so",
 	"libnvidia",
 	"libX11.so",
+	// X11↔xcb glue and the Direct Rendering xcb libs are GPU/driver-coupled but
+	// are NOT caught by the "libX11.so"/"libxcb.so" prefixes (the next char is
+	// "-", not "."), so list them explicitly.
+	"libX11-xcb.so",
 	"libxcb.so",
+	"libxcb-dri3.so",
+	"libxcb-dri2.so",
 	"libwayland",
+	// Mesa internals: kernel/DRM-coupled and loaded by the host's libEGL/libGL.
+	// Bundling a build-host copy shadows the host's (AppRun prepends usr/lib) and
+	// breaks the host GL stack — the cause of the "eglGetPlatformDisplayEXT / no
+	// provider of EGL_EXT_platform_base" abort on other distros. These mirror the
+	// canonical AppImage excludelist. NB: libepoxy is deliberately NOT listed — it
+	// is the app-level GL loader (not in the canonical excludelist) and stays
+	// bundled, matching linuxdeploy-plugin-gtk.
+	"libglapi.so",
+	"libgbm.so",
 }
 
 // isSystemLib returns true if the given library name matches a system lib prefix.
@@ -217,6 +242,35 @@ func isSystemLib(name string) bool {
 		}
 	}
 	return false
+}
+
+// relocateCxxRuntime moves any bundled libstdc++/libgcc_s out of usrLib into
+// cxxDir (created lazily). AppRun then adds cxxDir to the loader path only when
+// the bundled runtime is strictly newer than the host's — so an old build base
+// still runs on old hosts, while newer hosts (and their GL drivers) keep using
+// their own newer runtime. No-op when the app links neither (pure-C backend).
+func relocateCxxRuntime(usrLib, cxxDir string) error {
+	entries, err := os.ReadDir(usrLib)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		n := e.Name()
+		if !strings.HasPrefix(n, "libstdc++.so") && !strings.HasPrefix(n, "libgcc_s.so") {
+			continue
+		}
+		if err := os.MkdirAll(cxxDir, 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(filepath.Join(usrLib, n), filepath.Join(cxxDir, n)); err != nil {
+			return err
+		}
+		fmt.Printf("  📦 C++ runtime %s → usr/optional/cxx (used only if newer than host)\n", n)
+	}
+	return nil
 }
 
 // lddParse runs ldd on the given binary and returns a map of lib name → absolute path

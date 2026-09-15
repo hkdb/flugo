@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+**v0.2.0 - 09-15-2026**
+---
+
+- macOS build fix
+- AppImage fix
+
+
 **v0.1.13 - 09-12-2026**
 ---
 

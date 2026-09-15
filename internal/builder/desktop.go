@@ -59,6 +59,19 @@ func (b *Builder) buildDesktop(platform string, release bool) error {
 		return fmt.Errorf("go build: %w", err)
 	}
 
+	// `flutter build` triggers the native-assets hook (hook/build.dart), which
+	// would compile the backend a second time — wasted work, since buildGoShared
+	// above already produced the library bundleGoLib ships. Drop a marker the
+	// hook checks so it skips its own `go build`. The hooks runner strips env
+	// vars (only PATH survives), so a marker file is used rather than an env
+	// flag. Removed afterwards so a later `flutter run` (dev) still builds via
+	// the hook as usual.
+	skipMarker := filepath.Join(b.frontendDir(), ".flugo-skip-backend-hook")
+	if err := os.WriteFile(skipMarker, nil, 0o644); err != nil {
+		return fmt.Errorf("writing backend-hook skip marker: %w", err)
+	}
+	defer os.Remove(skipMarker)
+
 	if err := b.buildFlutter(platform, release); err != nil {
 		return fmt.Errorf("flutter build: %w", err)
 	}
@@ -130,8 +143,148 @@ func (b *Builder) bundleGoLib(platform string) error {
 		return fmt.Errorf("reading %s: %w", src, err)
 	}
 
+	if err := os.WriteFile(dst, data, 0o755); err != nil {
+		return err
+	}
 	fmt.Printf("  📦 Bundled %s\n", outputName)
-	return os.WriteFile(dst, data, 0o755)
+
+	// macOS: the Go library links its C dependencies (e.g. libfido2 → libcbor,
+	// libcrypto) dynamically by their absolute Homebrew install names, so a
+	// bundle copied to another Mac fails to load them. Copy that dependency
+	// closure into Contents/Frameworks and rewrite the load paths to
+	// @loader_path so the .app is self-contained. (Linux/Windows keep the plain
+	// copy — Windows dep-bundling is handled downstream in CI.)
+	if platform == "macos" {
+		if err := b.makeMacAppSelfContained(filepath.Dir(dst), dst); err != nil {
+			return fmt.Errorf("making .app self-contained: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// makeMacAppSelfContained walks the Mach-O dependency graph of the freshly
+// bundled Go library and copies every non-system dynamic dependency into
+// frameworksDir, rewriting each reference to @loader_path so the .app loads on
+// a Mac without the original (e.g. Homebrew) libraries installed. It is the
+// macOS analog of macdeployqt: copy the transitive closure, fix install names,
+// re-sign. mainDylib is the just-copied library (an absolute path inside
+// frameworksDir).
+func (b *Builder) makeMacAppSelfContained(frameworksDir, mainDylib string) error {
+	isSystem := func(p string) bool {
+		return strings.HasPrefix(p, "/usr/lib/") || strings.HasPrefix(p, "/System/Library/")
+	}
+
+	bundled := map[string]bool{} // basenames already copied into frameworksDir
+	queue := []string{mainDylib}
+	total := 0
+
+	for len(queue) > 0 {
+		file := queue[0]
+		queue = queue[1:]
+
+		deps, err := machODeps(file)
+		if err != nil {
+			return err
+		}
+
+		edited := false
+		for _, dep := range deps {
+			// System libraries stay dynamic; already-relocated references
+			// (@rpath/@loader_path/@executable_path) need no change.
+			if isSystem(dep) || strings.HasPrefix(dep, "@") {
+				continue
+			}
+			base := filepath.Base(dep)
+			// Skip a dylib's own id (self-reference).
+			if base == filepath.Base(file) {
+				continue
+			}
+
+			if !bundled[base] {
+				bundled[base] = true
+				total++
+				copyDst := filepath.Join(frameworksDir, base)
+				if err := copyFile(dep, copyDst, 0o755); err != nil {
+					return fmt.Errorf("bundling %s: %w", dep, err)
+				}
+				if err := runCommand("install_name_tool", []string{"-id", "@loader_path/" + base, copyDst}, "", nil); err != nil {
+					return fmt.Errorf("setting id of %s: %w", base, err)
+				}
+				if err := codesignAdhoc(copyDst); err != nil {
+					return err
+				}
+				// Process this dependency's own dependencies too.
+				queue = append(queue, copyDst)
+			}
+
+			// Rewrite the reference in the current file to the bundled copy.
+			if err := runCommand("install_name_tool", []string{"-change", dep, "@loader_path/" + base, file}, "", nil); err != nil {
+				return fmt.Errorf("rewriting %s in %s: %w", dep, filepath.Base(file), err)
+			}
+			edited = true
+		}
+
+		// install_name_tool invalidates the code signature; an invalid
+		// signature is fatal on Apple Silicon, so re-sign ad-hoc after edits.
+		if edited {
+			if err := codesignAdhoc(file); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Guardrail: fail loudly if any non-system, non-relocated dependency of the
+	// main library survived the rewrite (e.g. a copy that silently failed).
+	deps, err := machODeps(mainDylib)
+	if err != nil {
+		return err
+	}
+	for _, dep := range deps {
+		if !isSystem(dep) && !strings.HasPrefix(dep, "@") && filepath.Base(dep) != filepath.Base(mainDylib) {
+			return fmt.Errorf("%s still references non-system library %s", filepath.Base(mainDylib), dep)
+		}
+	}
+
+	fmt.Printf("  📦 Made .app self-contained (%d libs bundled)\n", total)
+	return nil
+}
+
+// machODeps returns the dynamic-library dependencies recorded in a Mach-O file
+// via `otool -L`, dropping the leading header line. The file's own LC_ID_DYLIB
+// (a self-reference) is left in the list; callers skip it by basename.
+func machODeps(file string) ([]string, error) {
+	out, err := exec.Command("otool", "-L", file).Output()
+	if err != nil {
+		return nil, fmt.Errorf("otool -L %s: %w", filepath.Base(file), err)
+	}
+	var deps []string
+	lines := strings.Split(string(out), "\n")
+	for i, line := range lines {
+		if i == 0 { // "<file>:" header
+			continue
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Each dep line is "<path> (compatibility version …, current version …)".
+		if idx := strings.Index(line, " ("); idx != -1 {
+			line = line[:idx]
+		}
+		deps = append(deps, strings.TrimSpace(line))
+	}
+	return deps, nil
+}
+
+// codesignAdhoc applies an ad-hoc (unsigned-identity) code signature. Required
+// after install_name_tool edits so the dylib remains loadable on Apple Silicon;
+// a later Developer-ID + notarization pass re-signs over this.
+func codesignAdhoc(file string) error {
+	if err := runCommand("codesign", []string{"--force", "--sign", "-", file}, "", nil); err != nil {
+		return fmt.Errorf("ad-hoc signing %s: %w", filepath.Base(file), err)
+	}
+	return nil
 }
 
 // buildGoShared compiles the Go backend as a C shared library.
