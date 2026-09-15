@@ -158,16 +158,16 @@ func TestSyncFlugoDeps_WritesGoModAndPubspec_WithPlugins(t *testing.T) {
 	gm, ps := writeFixture(t, dir, fxGoMod, fxPubspec)
 
 	result := &UpdateResult{}
-	if err := syncFlugoDeps(dir, "v0.3.0", true /*plugins*/, true /*offline*/, false /*dryRun*/, result); err != nil {
+	if err := syncFlugoDeps(dir, "v0.2.1", true /*plugins*/, true /*offline*/, false /*dryRun*/, result); err != nil {
 		t.Fatalf("syncFlugoDeps: %v", err)
 	}
 
 	gmOut, _ := os.ReadFile(gm)
-	if !strings.Contains(string(gmOut), "github.com/hkdb/flugo v0.3.0") {
+	if !strings.Contains(string(gmOut), "github.com/hkdb/flugo v0.2.1") {
 		t.Errorf("go.mod require not bumped:\n%s", gmOut)
 	}
 	psOut, _ := os.ReadFile(ps)
-	if !strings.Contains(string(psOut), "ref: v0.3.0") || strings.Contains(string(psOut), "ref: v0.2.0") {
+	if !strings.Contains(string(psOut), "ref: v0.2.1") || strings.Contains(string(psOut), "ref: v0.2.0") {
 		t.Errorf("pubspec plugin ref not bumped:\n%s", psOut)
 	}
 	if len(result.Updated) != 2 { // go.mod + pubspec
@@ -181,10 +181,10 @@ func TestSyncFlugoDeps_WithoutPlugins_LeavesPubspec(t *testing.T) {
 	gm, ps := writeFixture(t, dir, fxGoMod, fxPubspec)
 
 	result := &UpdateResult{}
-	if err := syncFlugoDeps(dir, "v0.3.0", false /*plugins*/, true, false, result); err != nil {
+	if err := syncFlugoDeps(dir, "v0.2.1", false /*plugins*/, true, false, result); err != nil {
 		t.Fatalf("syncFlugoDeps: %v", err)
 	}
-	if gmOut, _ := os.ReadFile(gm); !strings.Contains(string(gmOut), "flugo v0.3.0") {
+	if gmOut, _ := os.ReadFile(gm); !strings.Contains(string(gmOut), "flugo v0.2.1") {
 		t.Errorf("go.mod not bumped:\n%s", gmOut)
 	}
 	if psOut, _ := os.ReadFile(ps); !strings.Contains(string(psOut), "ref: v0.2.0") {
@@ -199,11 +199,11 @@ func TestSyncFlugoDeps_SkipsGoModWhenReplacePresent(t *testing.T) {
 	gm, _ := writeFixture(t, dir, goMod, fxPubspec)
 
 	result := &UpdateResult{}
-	if err := syncFlugoDeps(dir, "v0.3.0", false, true, false, result); err != nil {
+	if err := syncFlugoDeps(dir, "v0.2.1", false, true, false, result); err != nil {
 		t.Fatalf("syncFlugoDeps: %v", err)
 	}
 	gmOut, _ := os.ReadFile(gm)
-	if strings.Contains(string(gmOut), "flugo v0.3.0") {
+	if strings.Contains(string(gmOut), "flugo v0.2.1") {
 		t.Errorf("go.mod require should NOT be bumped when a replace is present:\n%s", gmOut)
 	}
 	if !strings.Contains(string(gmOut), "replace github.com/hkdb/flugo => /home/dev/flugo") {
@@ -217,13 +217,13 @@ func TestSyncFlugoDeps_DryRunWritesNothing(t *testing.T) {
 	gm, ps := writeFixture(t, dir, fxGoMod, fxPubspec)
 
 	result := &UpdateResult{}
-	if err := syncFlugoDeps(dir, "v0.3.0", true, true, true /*dryRun*/, result); err != nil {
+	if err := syncFlugoDeps(dir, "v0.2.1", true, true, true /*dryRun*/, result); err != nil {
 		t.Fatalf("syncFlugoDeps: %v", err)
 	}
-	if gmOut, _ := os.ReadFile(gm); strings.Contains(string(gmOut), "v0.3.0") {
+	if gmOut, _ := os.ReadFile(gm); strings.Contains(string(gmOut), "v0.2.1") {
 		t.Errorf("dry-run must not write go.mod:\n%s", gmOut)
 	}
-	if psOut, _ := os.ReadFile(ps); strings.Contains(string(psOut), "v0.3.0") {
+	if psOut, _ := os.ReadFile(ps); strings.Contains(string(psOut), "v0.2.1") {
 		t.Errorf("dry-run must not write pubspec:\n%s", psOut)
 	}
 }
