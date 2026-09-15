@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -148,6 +150,7 @@ func DataFromConfig(cfg *config.Config, projectDir string, cliVersion string) te
 		SDK:             cfg.Platforms.Linux.Flatpak.SDK,
 		Permissions:     cfg.Platforms.Linux.Flatpak.Permissions,
 		FlugoVersion:    cliVersion,
+		FlugoVersionTag: "v" + strings.TrimPrefix(cliVersion, "v"),
 		URLScheme:       cfg.App.URLScheme,
 		GoArches:        gotoolchain.Arches,
 	}
@@ -228,7 +231,7 @@ func SyncConfigFiles(projectDir string, cfg *config.Config, cliVersion string) e
 // Update re-renders framework-owned template files into an existing project.
 // If all is true, user-owned files are also updated.
 // If dryRun is true, no files are written.
-func Update(projectDir string, cfg *config.Config, all bool, dryRun bool, cliVersion string) (*UpdateResult, error) {
+func Update(projectDir string, cfg *config.Config, all bool, dryRun bool, cliVersion, tag string, plugins, offline bool) (*UpdateResult, error) {
 	if err := cfg.ValidateForGeneration(); err != nil {
 		return nil, err
 	}
@@ -331,6 +334,12 @@ func Update(projectDir string, cfg *config.Config, all bool, dryRun bool, cliVer
 		}
 	}
 
+	// Sync flugo dependency version pins (backend/go.mod always; plugin git refs
+	// in pubspec only with --plugins) to this CLI's tag, so they never drift.
+	if err := syncFlugoDeps(projectDir, tag, plugins, offline, dryRun, result); err != nil {
+		return nil, err
+	}
+
 	// Stamp flugo_version after a successful non-dry-run update.
 	if !dryRun && cliVersion != "" {
 		cfg.FlugoVersion = cliVersion
@@ -340,6 +349,138 @@ func Update(projectDir string, cfg *config.Config, all bool, dryRun bool, cliVer
 	}
 
 	return result, nil
+}
+
+// syncFlugoDeps pins a consuming app's flugo dependency references to `tag`
+// (e.g. "v0.2.1", derived from the flugo CLI's embedded VERSION): backend/go.mod's
+// flugo require is always bumped, and — only when plugins is true — every
+// flugo-repo plugin git `ref:` in frontend/pubspec.yaml. File edits reuse
+// applyRendered (backup + result records, honors dryRun). When !offline && !dryRun
+// it runs `go mod tidy` / `flutter pub get` to reconcile lockfiles; those failures
+// are warnings, not fatal. A local flugo `replace` in backend/go.mod is detected
+// and left intact (its version bump is skipped) — local overrides are
+// developer-managed.
+func syncFlugoDeps(projectDir, tag string, plugins, offline, dryRun bool, result *UpdateResult) error {
+	if tag == "" || tag == "v" {
+		fmt.Println("  ⚠️  could not determine flugo version (empty VERSION) — skipping dependency sync.")
+		return nil
+	}
+
+	// backend/go.mod flugo require — always.
+	goModPath := filepath.Join(projectDir, "backend", "go.mod")
+	if data, err := os.ReadFile(goModPath); err == nil {
+		if replaced := extractFlugoReplace(projectDir); replaced != "" {
+			fmt.Printf("  ℹ️  backend/go.mod has a local flugo replace (%s) — not bumping its version.\n", replaced)
+		} else if newData, changed := bumpGoModFlugoRequire(data, tag); changed {
+			if err := applyRendered(result, "backend/go.mod", goModPath, newData, dryRun); err != nil {
+				return err
+			}
+			if !offline && !dryRun {
+				fmt.Println("  📦 go mod tidy (backend)...")
+				tidy := exec.Command("go", "mod", "tidy")
+				tidy.Dir = filepath.Join(projectDir, "backend")
+				if out, err := tidy.CombinedOutput(); err != nil {
+					fmt.Printf("  ⚠️  go mod tidy failed (run it manually): %v\n%s\n", err, out)
+				}
+			}
+		}
+	}
+
+	if !plugins {
+		return nil
+	}
+
+	// frontend/pubspec.yaml flugo plugin git refs — opt-in via --plugins.
+	pubspecPath := filepath.Join(projectDir, "frontend", "pubspec.yaml")
+	if data, err := os.ReadFile(pubspecPath); err == nil {
+		if newData, changed := bumpPubspecFlugoRefs(data, tag); changed {
+			if err := applyRendered(result, "frontend/pubspec.yaml", pubspecPath, newData, dryRun); err != nil {
+				return err
+			}
+			if !offline && !dryRun {
+				fmt.Println("  📦 flutter pub get (frontend)...")
+				pg := exec.Command("flutter", "pub", "get")
+				pg.Dir = filepath.Join(projectDir, "frontend")
+				if out, err := pg.CombinedOutput(); err != nil {
+					fmt.Printf("  ⚠️  flutter pub get failed (run it manually): %v\n%s\n", err, out)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// flugoRequireRe matches the flugo require line in go.mod — both the block form
+// (`\tgithub.com/hkdb/flugo v1.2.3`) and the single-line form
+// (`require github.com/hkdb/flugo v1.2.3`) — capturing everything up to the
+// version token so only the version is replaced (a trailing `// indirect` stays
+// intact). It deliberately does NOT match a `replace github.com/hkdb/flugo`
+// line (that starts with "replace "; handled via extractFlugoReplace).
+var flugoRequireRe = regexp.MustCompile(`(?m)^(\s*(?:require\s+)?github\.com/hkdb/flugo\s+)v\S+`)
+
+// bumpGoModFlugoRequire rewrites the flugo require version to tag, returning the
+// new bytes and whether anything changed.
+func bumpGoModFlugoRequire(data []byte, tag string) ([]byte, bool) {
+	out := flugoRequireRe.ReplaceAll(data, []byte("${1}"+tag))
+	return out, !bytes.Equal(out, data)
+}
+
+// bumpPubspecFlugoRefs rewrites the `ref:` of every pubspec git dependency whose
+// `url:` points at the flugo repo, to tag. It scans `git:` mapping blocks by
+// indentation so it is order-independent and leaves all other deps untouched.
+func bumpPubspecFlugoRefs(data []byte, tag string) ([]byte, bool) {
+	lines := strings.Split(string(data), "\n")
+	changed := false
+	i := 0
+	for i < len(lines) {
+		if strings.TrimSpace(lines[i]) != "git:" {
+			i++
+			continue
+		}
+		gitIndent := leadingSpaces(lines[i])
+		// Collect the block body (deeper-indented lines) and detect a flugo url.
+		j := i + 1
+		isFlugo := false
+		for j < len(lines) {
+			if strings.TrimSpace(lines[j]) == "" {
+				j++
+				continue
+			}
+			if leadingSpaces(lines[j]) <= gitIndent {
+				break
+			}
+			t := strings.TrimSpace(lines[j])
+			if strings.HasPrefix(t, "url:") && strings.Contains(t, "github.com/hkdb/flugo") {
+				isFlugo = true
+			}
+			j++
+		}
+		if isFlugo {
+			for k := i + 1; k < j; k++ {
+				if !strings.HasPrefix(strings.TrimSpace(lines[k]), "ref:") {
+					continue
+				}
+				indent := lines[k][:leadingSpaces(lines[k])]
+				newLine := indent + "ref: " + tag
+				if lines[k] != newLine {
+					lines[k] = newLine
+					changed = true
+				}
+			}
+		}
+		i = j
+	}
+	return []byte(strings.Join(lines, "\n")), changed
+}
+
+// leadingSpaces returns the number of leading space/tab characters in s.
+func leadingSpaces(s string) int {
+	n := 0
+	for n < len(s) && (s[n] == ' ' || s[n] == '\t') {
+		n++
+	}
+	return n
 }
 
 // applyRendered writes one managed file's rendered content into the project and

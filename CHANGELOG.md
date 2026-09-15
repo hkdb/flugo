@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+**v0.2.1 - 09-15-2026**
+---
+
+- Improved flugo update version management
+- Fixed fresh scaffold versioning
+
+
 **v0.2.0 - 09-15-2026**
 ---
 
