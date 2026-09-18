@@ -247,6 +247,20 @@ func (b *Builder) makeMacAppSelfContained(frameworksDir, mainDylib string) error
 	}
 
 	fmt.Printf("  📦 Made .app self-contained (%d libs bundled)\n", total)
+
+	// Adding/rewriting dylibs under Contents/Frameworks after Flutter signed the
+	// bundle invalidates the .app's own signature (its CodeResources seal no
+	// longer matches — `codesign --verify` reports "a sealed resource is missing
+	// or invalid"). An invalid signature destabilizes the app's code identity,
+	// which macOS keys TCC grants (e.g. Input Monitoring, needed for HID
+	// hardware-key access) to — so the app silently loses those grants. Re-seal
+	// the whole bundle LAST (inside-out: the dylibs above were already signed),
+	// preserving Flutter's entitlements/flags on the main executable.
+	appPath := filepath.Dir(filepath.Dir(frameworksDir)) // <app>/Contents/Frameworks -> <app>
+	if err := codesignAppBundle(appPath); err != nil {
+		return err
+	}
+	fmt.Println("  🔏 Re-sealed .app signature")
 	return nil
 }
 
@@ -283,6 +297,22 @@ func machODeps(file string) ([]string, error) {
 func codesignAdhoc(file string) error {
 	if err := runCommand("codesign", []string{"--force", "--sign", "-", file}, "", nil); err != nil {
 		return fmt.Errorf("ad-hoc signing %s: %w", filepath.Base(file), err)
+	}
+	return nil
+}
+
+// codesignAppBundle re-seals an .app bundle ad-hoc so its CodeResources seal
+// covers the dylibs we added under Contents/Frameworks. --preserve-metadata
+// keeps the main executable's existing entitlements/flags/runtime from Flutter's
+// signature so re-signing doesn't strip them.
+func codesignAppBundle(appPath string) error {
+	args := []string{
+		"--force", "--sign", "-",
+		"--preserve-metadata=entitlements,requirements,flags,runtime",
+		appPath,
+	}
+	if err := runCommand("codesign", args, "", nil); err != nil {
+		return fmt.Errorf("re-sealing %s: %w", filepath.Base(appPath), err)
 	}
 	return nil
 }
