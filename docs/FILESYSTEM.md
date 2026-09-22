@@ -229,9 +229,9 @@ type WriteResult struct {
 
 | Environment | What happens |
 |-------------|-------------|
-| Native desktop | Writes directly to `targetPath`. If file exists and `force=false`, returns `Exists: true` without writing. |
-| Flatpak | Writes to a unique temp subdirectory. |
-| Mobile | Writes to a unique temp subdirectory. |
+| Native desktop | **Atomic write**: content goes to a hidden temp file beside `targetPath` (`.name.tmp-*`, mode 0600), is synced, then renamed into place. A crash or a failed producer never leaves a partial file, and an overwrite (`force=true`) never destroys the original before the replacement is complete. If the file exists and `force=false`, returns `Exists: true` without writing. |
+| Flatpak | Writes to a unique temp subdirectory; the Dart side saves it through the portal dialog. |
+| Mobile | Writes to a unique temp subdirectory; the Dart side saves it through the SAF dialog. |
 
 **Flutter side:**
 
@@ -255,6 +255,45 @@ _showSuccessDialog('Done', result);
 ```
 
 `handleWriteResult` does nothing on native desktop (file is already written). On Flatpak it shows a portal dialog. On mobile it shows a SAF dialog. The developer doesn't check.
+
+#### Streaming: `WriteFileStream`
+
+Same contract as `WriteFile`, but the content is produced by a callback that streams into the destination — no full-file buffer, so multi-GB outputs never materialize in RAM. Use it whenever the output is the result of a transform (decrypt, decompress, convert):
+
+```go
+result, err := filechooser.WriteFileStream(targetPath, force, func(w io.Writer) error {
+    return decryptInto(w, inputPath) // write as you go
+})
+```
+
+Everything in the table above applies: on native desktop the callback writes into the hidden temp file and the rename happens only after it returns `nil`; if it returns an error, `targetPath` is untouched and the temp file is removed. `WriteFile` is simply `WriteFileStream` with a callback that writes the buffer, so both share one code path.
+
+#### Verify before it lands: `WriteFileStreamDeferred`
+
+When the content must be inspected before it may appear at `targetPath` — a signature that is only known once the last byte is out, a checksum of a download — hold the final step back:
+
+```go
+pending, err := filechooser.WriteFileStreamDeferred(targetPath, force, func(w io.Writer) error {
+    var verr error
+    verified, verr = decryptAndVerify(w, inputPath)
+    return verr
+})
+if err != nil { return err }
+if pending.Exists { /* same handling as result.Exists above */ }
+
+if !verified {
+    // Ask the user (send `pending` to Dart as JSON, get it back after the dialog).
+    // No → nothing ever touched targetPath:
+    _ = filechooser.DiscardFile(pending)
+    return nil
+}
+// Yes / verified → promote it. Returns the usual WriteResult for handleWriteResult.
+result, err := filechooser.CommitFile(pending, force)
+```
+
+`PendingWrite` is JSON-encodable (`tmp_path`, `target_path`, `env`, `exists`) so a backend can hand it across a Dart confirmation dialog and receive it back for `CommitFile` / `DiscardFile`. On native desktop `CommitFile` renames the temp file into place (copy + fsync if the rename crosses a filesystem) and, with `force=false`, reports `Exists` instead of overwriting a file that appeared in the meantime — the temp file is kept for a retry with `force=true`. On Flatpak/mobile there is nothing to move: `CommitFile` returns the temp path for `handleWriteResult` to save, and `DiscardFile` removes the temp directory.
+
+**Migration note.** The signatures of `WriteFile` and `WriteFileStream` are unchanged. What changed is the failure behaviour on native desktop: a crash mid-write or a failing producer used to leave a partial (or truncated) file at `targetPath`; now the target is either complete or untouched. Apps that relied on seeing a partial file (none should) must adapt.
 
 ---
 

@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+**v0.2.3 - 09-24-2026**
+---
+
+- filechooser: `WriteFile` / `WriteFileStream` are atomic on native desktop
+- filechooser: `WriteFileStreamDeferred` / `CommitFile` / `DiscardFile` for verify-before-commit writes
+
+
 **v0.2.2 - 09-18-2026**
 ---
 

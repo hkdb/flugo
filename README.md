@@ -639,7 +639,7 @@ Run `flugo update --plugins` to align these git refs to the flugo version you're
 
 Flugo includes built-in bridge functions that handle common cross-platform concerns automatically. Developers don't need to write platform-specific code for file dialogs, app directory resolution, or other OS-level differences -- the framework handles it.
 
-- [File Chooser Service](docs/FILESYSTEM.md) -- cross-platform file pick, save, and open dialogs
+- [File Chooser Service](docs/FILESYSTEM.md) -- cross-platform file pick, save, and open dialogs; atomic file writes (`WriteFile`, `WriteFileStream`) and verify-before-commit writes (`WriteFileStreamDeferred` / `CommitFile` / `DiscardFile`)
 - [App Base Directory](docs/PATHS.md) -- platform-correct app home directory (`bridge.BaseDir()`)
 - [Platform Display Name](docs/MANIFEST.md) -- setting the app name on each platform's home screen / app list
 - [Secure Intake (`bridge.Secret`)](docs/SECRETS.md) -- passphrase / key-material intake without JSON or string materialization
