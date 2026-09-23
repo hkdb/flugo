@@ -9,12 +9,33 @@ import (
 	"path/filepath"
 
 	"github.com/hkdb/flugo/internal/config"
+	"github.com/hkdb/flugo/internal/scaffold"
 )
 
 // Builder coordinates building a Flugo project.
 type Builder struct {
 	projectDir string
 	cfg        *config.Config
+}
+
+// appInfoPkg is the package whose variables receive the app identity.
+const appInfoPkg = "github.com/hkdb/flugo/pkg/appinfo"
+
+// goBuildArgs is the `go build` invocation every backend build shares. It
+// stamps the app's name, id and version from flugo.yaml into pkg/appinfo via
+// -ldflags, so a built backend knows what it was built as; a plain `go build`
+// leaves appinfo reporting "dev".
+func (b *Builder) goBuildArgs(buildmode, output string) []string {
+	ld := fmt.Sprintf("-X '%s.version=%s' -X '%s.name=%s' -X '%s.id=%s'",
+		appInfoPkg, b.cfg.App.Version, appInfoPkg, b.cfg.App.Name, appInfoPkg, b.cfg.App.ID)
+	return []string{"build", "-buildmode=" + buildmode, "-ldflags", ld, "-o", output, "."}
+}
+
+// checkAppVersion refuses to build while frontend/pubspec.yaml carries a
+// different version than flugo.yaml: builds never edit source, so the developer
+// runs `flugo gen`, which stamps it. Keeps one bump from shipping two numbers.
+func (b *Builder) checkAppVersion() error {
+	return scaffold.CheckAppVersion(b.projectDir, b.cfg.App.Version)
 }
 
 // New creates a Builder.
@@ -27,6 +48,9 @@ func New(projectDir string, cfg *config.Config) *Builder {
 
 // Build builds for the specified platform.
 func (b *Builder) Build(platform string, release bool) error {
+	if err := b.checkAppVersion(); err != nil {
+		return err
+	}
 	fmt.Printf("\n🏗️  Building for %s...\n", platform)
 
 	switch platform {
@@ -101,13 +125,26 @@ func (b *Builder) BuildAll(release bool) error {
 }
 
 // BuildFlatpak builds a Flatpak package.
-func (b *Builder) BuildFlatpak() error { return b.buildFlatpak() }
+func (b *Builder) BuildFlatpak() error {
+	if err := b.checkAppVersion(); err != nil {
+		return err
+	}
+	return b.buildFlatpak()
+}
 
 // BuildAppImage builds an AppImage package.
-func (b *Builder) BuildAppImage() error { return b.buildAppImage() }
+func (b *Builder) BuildAppImage() error {
+	if err := b.checkAppVersion(); err != nil {
+		return err
+	}
+	return b.buildAppImage()
+}
 
 // Run builds and runs the app for the given platform.
 func (b *Builder) Run(platform string) error {
+	if err := b.checkAppVersion(); err != nil {
+		return err
+	}
 	switch platform {
 	case "android":
 		return b.runAndroid()

@@ -345,6 +345,20 @@ than relying on git-tag detection (which only works for tagged installs).
 The tag is only needed so consumers' `go.mod require github.com/hkdb/flugo vX.Y.Z` resolves; flugo itself no
 longer depends on the tag to know its version.
 
+### App version
+
+Your app's version has **one source**: `app: version:` in `flugo.yaml`. Bump it there and run `flugo gen`:
+
+- `flugo gen` writes it into `frontend/pubspec.yaml` (`version:`, keeping any `+build` number) — which Flutter
+  turns into `version.json` (what `package_info_plus` shows), Android `versionName` and iOS
+  `CFBundleShortVersionString`.
+- `flugo build` / `flugo run` stamp the same values into the Go backend (`github.com/hkdb/flugo/pkg/appinfo`:
+  `appinfo.Version()`, `Name()`, `ID()`; also `flugoAppInfoService.Get` over the bridge) via `-ldflags`, and
+  **refuse to build** while the pubspec copy is stale — a forgotten `flugo gen` is caught, not shipped. Builds
+  never edit source files.
+
+`flugo update` is unrelated to the app version — it only moves the framework version.
+
 ## Linting
 
 Scaffolded projects ship with linting baked in for both layers — no setup needed:

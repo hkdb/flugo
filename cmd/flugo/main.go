@@ -296,10 +296,24 @@ var generateCmd = &cobra.Command{
 		fmt.Println("  ✅ backend/bridge/bridge.gen.h")
 		fmt.Println("  ✅ frontend/lib/bridge/bridge.gen.dart")
 
+		// The app's version has one source, flugo.yaml: `gen` carries it to
+		// the frontend (pubspec); `build` stamps the backend and refuses while
+		// the pubspec copy is stale.
+		changed, err := scaffold.SyncAppVersion(projectDir, cfg.App.Version, false)
+		if err != nil {
+			return err
+		}
+		if changed {
+			fmt.Printf("  🔖 frontend/pubspec.yaml version → %s\n", cfg.App.Version)
+		}
+
 		fmt.Println("\n📦 Resolving Go dependencies...")
 		tidyCmd := exec.Command("go", "mod", "tidy")
 		tidyCmd.Dir = backendDir
 		if out, err := tidyCmd.CombinedOutput(); err != nil {
+			if strings.Contains(string(out), "github.com/hkdb/flugo") {
+				return fmt.Errorf("go mod tidy: %w\n%s\nThe generated code needs a newer flugo than backend/go.mod requires — run `flugo update` first, then `flugo gen` again.", err, out)
+			}
 			return fmt.Errorf("go mod tidy: %w\n%s", err, out)
 		}
 		dlCmd := exec.Command("go", "mod", "download", "all")

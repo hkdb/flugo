@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+**v0.2.5 - 09-24-2026**
+---
+
+- Unified version stamping based on flugo.yaml on flugo generate
+
+
 **v0.2.4 - 09-24-2026**
 ---
 
