@@ -62,11 +62,7 @@ func (b *Builder) buildAndroid(release bool) error {
 			"CC=" + cc,
 		}
 
-		args := []string{
-			"build", "-buildmode=c-shared",
-			"-o", filepath.Join(outDir, "libbackend.so"),
-			".",
-		}
+		args := b.goBuildArgs("c-shared", filepath.Join(outDir, "libbackend.so"))
 
 		if err := runCommand("go", args, b.backendDir(), env); err != nil {
 			return fmt.Errorf("go build (%s): %w", abi.abi, err)
@@ -117,11 +113,7 @@ func (b *Builder) buildIOS(release bool) error {
 		fmt.Sprintf("CGO_LDFLAGS=-isysroot %s -arch arm64 -miphoneos-version-min=%s", sdk, b.cfg.Platforms.IOS.MinimumVersion),
 	}
 
-	args := []string{
-		"build", "-buildmode=c-archive",
-		"-o", outputPath,
-		".",
-	}
+	args := b.goBuildArgs("c-archive", outputPath)
 
 	if err := runCommand("go", args, b.backendDir(), env); err != nil {
 		return fmt.Errorf("go build (ios): %w", err)
@@ -175,11 +167,7 @@ func (b *Builder) runAndroid() error {
 		"CC=" + cc,
 	}
 
-	args := []string{
-		"build", "-buildmode=c-shared",
-		"-o", filepath.Join(outDir, "libbackend.so"),
-		".",
-	}
+	args := b.goBuildArgs("c-shared", filepath.Join(outDir, "libbackend.so"))
 
 	if err := runCommand("go", args, b.backendDir(), env); err != nil {
 		return fmt.Errorf("go build (%s): %w", deviceABI.abi, err)
@@ -226,11 +214,7 @@ func (b *Builder) runIOS() error {
 		fmt.Sprintf("CGO_LDFLAGS=-isysroot %s -arch arm64 -miphoneos-version-min=%s", sdk, minVersion),
 	}
 
-	args := []string{
-		"build", "-buildmode=c-archive",
-		"-o", outputPath,
-		".",
-	}
+	args := b.goBuildArgs("c-archive", outputPath)
 
 	if err := runCommand("go", args, b.backendDir(), env); err != nil {
 		return fmt.Errorf("go build (ios): %w", err)

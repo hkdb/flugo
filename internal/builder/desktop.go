@@ -344,7 +344,7 @@ func (b *Builder) buildGoShared(platform string) error {
 		}
 	}
 
-	args := []string{"build", "-buildmode=c-shared", "-o", outputPath, "."}
+	args := b.goBuildArgs("c-shared", outputPath)
 
 	fmt.Printf("  ⚙️  Compiling Go backend (%s/%s)...\n", goos, goarch)
 	return runCommand("go", args, b.backendDir(), env)

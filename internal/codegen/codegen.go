@@ -447,7 +447,7 @@ func (g *Generator) generateGobridge(_ []BoundType, _ string) error {
 	buf.WriteString("// The bridge runtime (github.com/hkdb/flugo/pkg/bridge) handles\n")
 	buf.WriteString("// method dispatch via reflection at runtime.\n")
 	buf.WriteString("// No generated Go dispatch code is needed.\n\n")
-	buf.WriteString("import (\n\t_ \"github.com/hkdb/flugo/pkg/bridge\"\n\t_ \"github.com/hkdb/flugo/pkg/filechooser\"\n)\n")
+	buf.WriteString("import (\n\t_ \"github.com/hkdb/flugo/pkg/appinfo\"\n\t_ \"github.com/hkdb/flugo/pkg/bridge\"\n\t_ \"github.com/hkdb/flugo/pkg/filechooser\"\n)\n")
 
 	// Write to the backend root directory (same package as main.go) so blank
 	// imports are compiled. The bridge/ subdirectory is a separate Go package
