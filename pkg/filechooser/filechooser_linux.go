@@ -119,38 +119,11 @@ func (s *FileChooserService) PickDirectory(title string) (string, error) {
 	return uriToPath(uris[0])
 }
 
-// WriteFile writes data to the appropriate location based on the environment.
-// On native Linux, it writes directly to targetPath.
-// In a Flatpak sandbox, it writes to a temp directory (the Dart side handles the portal dialog).
-// When force is false and the file already exists on native desktop, it returns Exists: true
-// without writing, so the Dart side can ask the user for confirmation.
-func WriteFile(targetPath string, data []byte, force bool) (WriteResult, error) {
-	if isFlatpak() {
-		tmpPath, err := tempOutputPath(targetPath)
-		if err != nil {
-			return WriteResult{}, fmt.Errorf("creating temp dir: %w", err)
-		}
-		if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
-			return WriteResult{}, fmt.Errorf("writing temp file: %w", err)
-		}
-		return WriteResult{Path: tmpPath, Env: "flatpak"}, nil
-	}
-	// Native desktop: check for existing file
-	if !force {
-		if _, err := os.Stat(targetPath); err == nil {
-			return WriteResult{Path: targetPath, Env: "native", Exists: true}, nil
-		}
-	}
-	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
-		return WriteResult{}, fmt.Errorf("writing file: %w", err)
-	}
-	return WriteResult{Path: targetPath, Env: "native"}, nil
-}
-
-// writeTarget selects the streaming-write destination for the current Linux
+// writeTarget selects the write destination for the current Linux
 // environment: a temp file under Flatpak (Dart saves it via the portal), or the
 // target path on native desktop (Exists reported when force is false and the
-// file already exists).
+// file already exists). WriteFile / WriteFileStream in filechooser.go do the
+// writing.
 func writeTarget(targetPath string, force bool) (dest, env string, exists bool, err error) {
 	if isFlatpak() {
 		tmpPath, terr := tempOutputPath(targetPath)

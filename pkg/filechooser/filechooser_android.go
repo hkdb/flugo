@@ -4,24 +4,11 @@ package filechooser
 
 import (
 	"fmt"
-	"os"
 )
 
-// WriteFile writes data to a unique temp subdirectory on Android.
-// The Dart side handles the SAF dialog for user-chosen save location.
-func WriteFile(targetPath string, data []byte, force bool) (WriteResult, error) {
-	tmpPath, err := tempOutputPath(targetPath)
-	if err != nil {
-		return WriteResult{}, fmt.Errorf("creating temp dir: %w", err)
-	}
-	if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
-		return WriteResult{}, fmt.Errorf("writing temp file: %w", err)
-	}
-	return WriteResult{Path: tmpPath, Env: "mobile"}, nil
-}
-
-// writeTarget selects the streaming-write destination on Android: a temp file
-// that the Dart side then saves to the user's chosen location via the SAF dialog.
+// writeTarget selects the write destination on Android: a temp file that the
+// Dart side then saves to the user's chosen location via the SAF dialog.
+// WriteFile / WriteFileStream in filechooser.go do the writing.
 func writeTarget(targetPath string, _ bool) (dest, env string, exists bool, err error) {
 	tmpPath, terr := tempOutputPath(targetPath)
 	if terr != nil {

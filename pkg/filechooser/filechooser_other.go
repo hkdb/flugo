@@ -8,40 +8,10 @@ import (
 	"runtime"
 )
 
-// WriteFile writes data to the appropriate location based on the environment.
-// On macOS/Windows, it writes directly to targetPath.
-// WriteFile writes data to the appropriate location.
-// On iOS, it writes to a temp directory (the Dart side handles the SAF dialog).
-// On macOS/Windows, it writes directly to targetPath.
-// When force is false and the file already exists on native desktop, it returns Exists: true
-// without writing, so the Dart side can ask the user for confirmation.
-func WriteFile(targetPath string, data []byte, force bool) (WriteResult, error) {
-	// iOS: mobile
-	if runtime.GOOS == "ios" {
-		tmpPath, err := tempOutputPath(targetPath)
-		if err != nil {
-			return WriteResult{}, fmt.Errorf("creating temp dir: %w", err)
-		}
-		if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
-			return WriteResult{}, fmt.Errorf("writing temp file: %w", err)
-		}
-		return WriteResult{Path: tmpPath, Env: "mobile"}, nil
-	}
-	// macOS, Windows: native desktop — check for existing file
-	if !force {
-		if _, err := os.Stat(targetPath); err == nil {
-			return WriteResult{Path: targetPath, Env: "native", Exists: true}, nil
-		}
-	}
-	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
-		return WriteResult{}, fmt.Errorf("writing file: %w", err)
-	}
-	return WriteResult{Path: targetPath, Env: "native"}, nil
-}
-
-// writeTarget selects the streaming-write destination: a temp file on iOS (Dart
-// saves it via the SAF dialog), or the target path on macOS/Windows native
-// desktop (Exists reported when force is false and the file already exists).
+// writeTarget selects the write destination: a temp file on iOS (Dart saves
+// it via the SAF dialog), or the target path on macOS/Windows native desktop
+// (Exists reported when force is false and the file already exists). WriteFile
+// / WriteFileStream in filechooser.go do the writing.
 func writeTarget(targetPath string, force bool) (dest, env string, exists bool, err error) {
 	if runtime.GOOS == "ios" {
 		tmpPath, terr := tempOutputPath(targetPath)
