@@ -1,6 +1,12 @@
 # CHANGELOG
 
 
+**v0.2.4 - 09-24-2026**
+---
+
+- deep linking (Linux): the single-instance socket is created in `$XDG_RUNTIME_DIR`, else the app's own data dir (`$XDG_DATA_HOME/<app>` or `~/.local/share/<app>`, 0700) — never the shared system temp.
+
+
 **v0.2.3 - 09-24-2026**
 ---
 
