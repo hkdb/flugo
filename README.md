@@ -477,9 +477,9 @@ myapp/
 │   ├── .golangci.yml          # Go lint config (correctness-first)
 │   ├── main.go                # Bridge initialization (bridge.Bind)
 │   ├── service.go             # Your Go services
-│   └── bridge/                # Generated bridge code
-│       ├── bridge.gen.go
-│       └── bridge.gen.h
+│   ├── bridge.gen.go          # Generated bridge registration (generated)
+│   └── bridge/
+│       └── bridge.gen.h       # Generated C header (generated)
 ├── frontend/
 │   ├── pubspec.yaml           # Flutter dependencies
 │   ├── analysis_options.yaml  # Dart analyzer config
